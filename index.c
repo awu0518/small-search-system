@@ -15,7 +15,7 @@ int main() {
 
     for (int i = 0; i < 5; i++) {
         int n = getline(&line, &lineSize, collection);
-        printf(line);
+        print(line);
     }
 
     free(line);
