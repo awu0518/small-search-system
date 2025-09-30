@@ -1,4 +1,4 @@
-// g++ -O3 -std=c++20 index.cpp -o index
+// g++ -O3 -std=c++20 readCollection.cpp -o readCollection
 
 #include <iostream>
 #include <fstream>
