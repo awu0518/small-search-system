@@ -35,7 +35,8 @@ int main() {
         uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
         std::string passage = line.substr(tab+1);
 
-        tokenizeString(passage+'\n', tokens);
+        std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
+        tokenizeString(passage, tokens, pattern);
         for (std::string i: tokens){
             std::cout << i << " ";
         }
@@ -89,8 +90,7 @@ uint32_t unpackDocID(uint64_t pack) {
 Splits and normalizes the string into tokens of all lowercase words without
 nonalphanumeric characters
 */
-void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
-    std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
+void tokenizeString(const std::string& line, std::vector<std::string>& tokens, std::regex pattern) {
     tokens.clear();
     std::string tempString;
 
@@ -99,29 +99,26 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     for (char ch : line) {
         if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
         else if (ch == '.') {tempString.push_back('.');} // we need to keep '.'
-        else if (ch == ' ' || ch == '\n') { // tokenize by space
+        else if (ch == ' ') { // tokenize by space
             if (tempString.size() == 0) { continue; }
-            if (tempString.back() == '\n'){
-                tempString.pop_back();
-            }
             if (!std::regex_search(tempString, pattern)
                 && tempString.back() == '.'){ // if this isn't a match we don't
                 tempString.pop_back(); // need the '.' in it
-            } // this is to account for words at the end of a sentence
-            // ...they did this. Then they...
-            // but we need to account for the following sentence
-            // ... by the U.S.A. Therefore...
-            
+            } 
             tokens.push_back(tempString);
             tempString.clear();
             
         }
-        // else {
-        //     tokens.push_back(tempString);
-        //     tempString.clear();
-        // }
     }
-// By the U.S. This 
+    if (!tempString.empty()){
+        if (!std::regex_search(tempString, pattern)
+            && tempString.back() == '.'){ 
+            tempString.pop_back(); 
+        }
+        tokens.push_back(tempString);
+        tempString.clear();
+    }
+
 }
 
 /*
