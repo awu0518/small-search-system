@@ -12,6 +12,7 @@ uint64_t pack(uint32_t termID, uint32_t docID);
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
+void writeTempFile(const std::vector<uint64_t>& buffer);
 
 int main() {
     std::ifstream collection("collection.tsv");
@@ -40,20 +41,20 @@ int main() {
             if (lexicon.find(token) == lexicon.end()) {
                 lexicon.insert({token, currTermID++});
                 termToWord.push_back(token);
-
             }
 
             buffer.push_back(pack(lexicon[token], docId));
         }
-
-        std::sort(buffer.begin(), buffer.end());
-
-        // for (uint64_t num : buffer) {
-        //     uint32_t termId = unpackTermID(num);
-        //     uint32_t docId = unpackDocID(num);
-        //     std::cout << "(" << termToWord[termId] << ", " << docId << ")" << " ";
-        // }
     }
+
+    std::sort(buffer.begin(), buffer.end());
+    writeTempFile(buffer);
+
+    // for (uint64_t num : buffer) {
+    //     uint32_t termId = unpackTermID(num);
+    //     uint32_t docId = unpackDocID(num);
+    //     std::cout << "(" << termToWord[termId] << ", " << docId << ")" << " ";
+    // }
 
     collection.close();
     return 0;
@@ -81,6 +82,10 @@ uint32_t unpackDocID(uint64_t pack) {
     return uint32_t(pack & 0xffffffffu);
 }
 
+/*
+Splits and normalizes the string into tokens of all lowercase words without
+nonalphanumeric characters
+*/
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     tokens.clear();
     std::string tempString;
@@ -93,5 +98,34 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
             tokens.push_back(tempString);
             tempString.clear();
         }
+    }
+}
+
+/*
+TODO: switch to actual file, currently to vector and output for testing.
+
+Given a vector of packed integers, groups together all the numbers so we get files of
+(packedNum, freq) which can be unpacked into (termID, docID, freq). 
+
+TODO: consider impact score instead of freq -> will need size of token vector from earlier
+*/
+void writeTempFile(const std::vector<uint64_t>& buffer) {
+    std::vector<std::pair<uint64_t, int>> output;
+
+    int currCount = 1;
+    uint64_t currNum = buffer[0];
+    for (size_t i = 1; i < buffer.size(); i++) {
+        if (buffer[i] == currNum)  { currCount += 1; }
+        else {
+            output.push_back(std::pair(currNum, currCount));
+            currNum = buffer[i];
+            currCount = 1;
+        }
+        std::cout << buffer[i] << " ";
+    }
+    std::cout << std::endl;
+
+    for (const std::pair<uint64_t, int>& pair : output) {
+        std::cout << unpackTermID(pair.first) << " " << unpackDocID(pair.first) << " " << pair.second << " | ";
     }
 }
