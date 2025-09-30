@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string.h>
 #include <algorithm>
-
+#include <regex>
 uint64_t pack(uint32_t termID, uint32_t docID);
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
@@ -28,15 +28,18 @@ int main() {
     std::vector<std::string> tokens;
 
     std::string line = ""; 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
         std::getline(collection, line);
         size_t tab = line.find('\t');
 
         uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
         std::string passage = line.substr(tab+1);
 
-        tokenizeString(passage, tokens);
-
+        tokenizeString(passage+'\n', tokens);
+        for (std::string i: tokens){
+            std::cout << i << " ";
+        }
+        std::cout << std::endl;
         for (const std::string& token : tokens) {
             if (lexicon.find(token) == lexicon.end()) {
                 lexicon.insert({token, currTermID++});
@@ -48,7 +51,7 @@ int main() {
     }
 
     std::sort(buffer.begin(), buffer.end());
-    writeTempFile(buffer);
+    // writeTempFile(buffer);
 
     // for (uint64_t num : buffer) {
     //     uint32_t termId = unpackTermID(num);
@@ -87,18 +90,38 @@ Splits and normalizes the string into tokens of all lowercase words without
 nonalphanumeric characters
 */
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
+    std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
     tokens.clear();
     std::string tempString;
 
     // TODO: work out normalizing - ex. U.S. -> u s which might not be what we want
+
     for (char ch : line) {
-        if (isalnum(ch)) { tempString.push_back((char)tolower(ch)); }
-        else {
+        if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
+        else if (ch == '.') {tempString.push_back('.');} // we need to keep '.'
+        else if (ch == ' ' || ch == '\n') { // tokenize by space
             if (tempString.size() == 0) { continue; }
+            if (tempString.back() == '\n'){
+                tempString.pop_back();
+            }
+            if (!std::regex_search(tempString, pattern)
+                && tempString.back() == '.'){ // if this isn't a match we don't
+                tempString.pop_back(); // need the '.' in it
+            } // this is to account for words at the end of a sentence
+            // ...they did this. Then they...
+            // but we need to account for the following sentence
+            // ... by the U.S.A. Therefore...
+            
             tokens.push_back(tempString);
             tempString.clear();
+            
         }
+        // else {
+        //     tokens.push_back(tempString);
+        //     tempString.clear();
+        // }
     }
+// By the U.S. This 
 }
 
 /*
