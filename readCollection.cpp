@@ -37,10 +37,7 @@ int main() {
 
         std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
         tokenizeString(passage, tokens, pattern);
-        for (std::string i: tokens){
-            std::cout << i << " ";
-        }
-        std::cout << std::endl;
+        
         for (const std::string& token : tokens) {
             if (lexicon.find(token) == lexicon.end()) {
                 lexicon.insert({token, currTermID++});
