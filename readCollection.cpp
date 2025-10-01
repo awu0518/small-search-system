@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string.h>
 #include <algorithm>
-
+#include <regex>
 uint64_t pack(uint32_t termID, uint32_t docID);
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
@@ -28,15 +28,19 @@ int main() {
     std::vector<std::string> tokens;
 
     std::string line = ""; 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
         std::getline(collection, line);
         size_t tab = line.find('\t');
 
         uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
         std::string passage = line.substr(tab+1);
 
-        tokenizeString(passage, tokens);
-
+        std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
+        tokenizeString(passage, tokens, pattern);
+        for (std::string i: tokens){
+            std::cout << i << " ";
+        }
+        std::cout << std::endl;
         for (const std::string& token : tokens) {
             if (lexicon.find(token) == lexicon.end()) {
                 lexicon.insert({token, currTermID++});
@@ -48,7 +52,7 @@ int main() {
     }
 
     std::sort(buffer.begin(), buffer.end());
-    writeTempFile(buffer);
+    // writeTempFile(buffer);
 
     // for (uint64_t num : buffer) {
     //     uint32_t termId = unpackTermID(num);
@@ -86,19 +90,35 @@ uint32_t unpackDocID(uint64_t pack) {
 Splits and normalizes the string into tokens of all lowercase words without
 nonalphanumeric characters
 */
-void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
+void tokenizeString(const std::string& line, std::vector<std::string>& tokens, std::regex pattern) {
     tokens.clear();
     std::string tempString;
 
     // TODO: work out normalizing - ex. U.S. -> u s which might not be what we want
+
     for (char ch : line) {
-        if (isalnum(ch)) { tempString.push_back((char)tolower(ch)); }
-        else {
+        if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
+        else if (ch == '.') {tempString.push_back('.');} // we need to keep '.'
+        else if (ch == ' ') { // tokenize by space
             if (tempString.size() == 0) { continue; }
+            if (!std::regex_search(tempString, pattern)
+                && tempString.back() == '.'){ // if this isn't a match we don't
+                tempString.pop_back(); // need the '.' in it
+            } 
             tokens.push_back(tempString);
             tempString.clear();
+            
         }
     }
+    if (!tempString.empty()){
+        if (!std::regex_search(tempString, pattern)
+            && tempString.back() == '.'){ 
+            tempString.pop_back(); 
+        }
+        tokens.push_back(tempString);
+        tempString.clear();
+    }
+
 }
 
 /*
