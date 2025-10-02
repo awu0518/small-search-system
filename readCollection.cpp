@@ -8,13 +8,23 @@
 #include <string.h>
 #include <algorithm>
 #include <regex>
+#include <filesystem>
+
+const int FILE_PER_DOC = 34539;
+const int NUM_FILES = 256;
+
 uint64_t pack(uint32_t termID, uint32_t docID);
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
-void writeTempFile(const std::vector<uint64_t>& buffer);
+void writeTempFile(const std::vector<uint64_t>& buffer, int iter);
+void writeOtherFiles(const std::unordered_map<std::string, uint32_t>& lexicon, 
+    const std::vector<std::string>& termToWord,
+    const std::unordered_map<uint32_t, size_t>& pageTable);
+
 
 int main() {
+    std::filesystem::create_directory("tempFiles");
     std::ifstream collection("collection.tsv");
     if (!collection) { std::cerr << "Unable to open collection.tsv"; exit(1); }
 
@@ -22,22 +32,22 @@ int main() {
     std::vector<std::string> termToWord;
     uint32_t currTermID = 0;
 
-    std::unordered_map<uint32_t, double> pageTable;
+    std::unordered_map<uint32_t, size_t> pageTable;
 
     std::vector<uint64_t> buffer;
     std::vector<std::string> tokens;
 
     std::string line = ""; 
-    for (int i = 0; i < 5; i++) {
-        std::getline(collection, line);
+    for (int i = 0; i < NUM_FILES; i++) {
+        for (int j = 0; i < FILE_PER_DOC && std::getline(collection, line); j++) {
         size_t tab = line.find('\t');
 
         uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
         std::string passage = line.substr(tab+1);
 
-        std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
-        tokenizeString(passage, tokens, pattern);
-        
+        tokenizeString(passage, tokens);
+        pageTable.insert({docId, tokens.size()});
+
         for (const std::string& token : tokens) {
             if (lexicon.find(token) == lexicon.end()) {
                 lexicon.insert({token, currTermID++});
@@ -45,19 +55,18 @@ int main() {
             }
 
             buffer.push_back(pack(lexicon[token], docId));
+            }
         }
+
+        if (buffer.empty()) { break; }
+
+        std::sort(buffer.begin(), buffer.end());
+        writeTempFile(buffer, i);
+        buffer.clear();
     }
-
-    std::sort(buffer.begin(), buffer.end());
-    // writeTempFile(buffer);
-
-    // for (uint64_t num : buffer) {
-    //     uint32_t termId = unpackTermID(num);
-    //     uint32_t docId = unpackDocID(num);
-    //     std::cout << "(" << termToWord[termId] << ", " << docId << ")" << " ";
-    // }
-
     collection.close();
+
+    writeOtherFiles(lexicon, termToWord, pageTable);
     return 0;
 }
 
@@ -85,13 +94,12 @@ uint32_t unpackDocID(uint64_t pack) {
 
 /*
 Splits and normalizes the string into tokens of all lowercase words without
-nonalphanumeric characters
+nonalphanumeric characters except those within words
 */
-void tokenizeString(const std::string& line, std::vector<std::string>& tokens, std::regex pattern) {
+void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     tokens.clear();
+    const static std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
     std::string tempString;
-
-    // TODO: work out normalizing - ex. U.S. -> u s which might not be what we want
 
     for (char ch : line) {
         if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
@@ -119,30 +127,52 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens, s
 }
 
 /*
-TODO: switch to actual file, currently to vector and output for testing.
-
 Given a vector of packed integers, groups together all the numbers so we get files of
 (packedNum, freq) which can be unpacked into (termID, docID, freq). 
 
 TODO: consider impact score instead of freq -> will need size of token vector from earlier
 */
-void writeTempFile(const std::vector<uint64_t>& buffer) {
-    std::vector<std::pair<uint64_t, int>> output;
+void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
+    std::string fileName = "tempFiles/temp" + std::to_string(iter);
+    std::ofstream output(fileName);
+    if (!output) { std::cerr << "Failed to open stream for temp file"; exit(1); }
 
     int currCount = 1;
     uint64_t currNum = buffer[0];
     for (size_t i = 1; i < buffer.size(); i++) {
         if (buffer[i] == currNum)  { currCount += 1; }
         else {
-            output.push_back(std::pair(currNum, currCount));
+            output << currNum << " " << currCount << " ";
             currNum = buffer[i];
             currCount = 1;
         }
-        std::cout << buffer[i] << " ";
     }
-    std::cout << std::endl;
+    output << currNum << " " << currCount << " "; // for final object
+    output.close();
+}
 
-    for (const std::pair<uint64_t, int>& pair : output) {
-        std::cout << unpackTermID(pair.first) << " " << unpackDocID(pair.first) << " " << pair.second << " | ";
+void writeOtherFiles(const std::unordered_map<std::string, uint32_t>& lexicon, 
+    const std::vector<std::string>& termToWord,
+    const std::unordered_map<uint32_t, size_t>& pageTable) {
+
+    std::ofstream lexiconOutput("tempFiles/lexicon");
+    if (!lexiconOutput) { std::cerr << "Failed to open stream for lexicon"; exit(1); }
+    for (const auto& entry : lexicon) {
+        lexiconOutput << entry.first << " " << entry.second << " ";
     }
+    lexiconOutput.close();
+
+    std::ofstream termToWordOutput("tempFiles/termToWord");
+    if (!termToWordOutput) { std::cerr << "Failed to open stream for termToWord"; exit(1); }
+    for (const std::string& entry : termToWord) {
+        termToWordOutput << entry << " ";
+    }
+    termToWordOutput.close();
+
+    std::ofstream pageTableOutput("tempFiles/pageTable");
+    if (!pageTableOutput) { std::cerr << "Failed to open stream for pageTable"; exit(1); }
+    for (const auto& entry : pageTable) {
+        pageTableOutput << entry.first << " " << entry.second << " ";
+    }
+    pageTableOutput.close();
 }
