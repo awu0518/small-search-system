@@ -49,21 +49,22 @@ int main() {
             pageTable.insert({docId, tokens.size()});
 
             for (const std::string& token : tokens) {
-                if (lexicon.find(token) == lexicon.end()) {
+                if (lexicon.find(token) == lexicon.end()) { // checks if word already has a termID
                     lexicon.insert({token, currTermID++});
                     termToWord.push_back(token);
                 }
 
                 buffer.push_back(pack(lexicon[token], docId));
-                }
             }
+        }
 
-        if (buffer.empty()) { break; }
+        if (buffer.empty()) { break; } // could be done early
 
         std::sort(buffer.begin(), buffer.end());
         writeTempFile(buffer, i);
         buffer.clear();
     }
+
     collection.close();
 
     writeOtherFiles(lexicon, termToWord, pageTable);
@@ -151,6 +152,9 @@ void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
     output.close();
 }
 
+/*
+Writes the lexicon v1, termToWord, and page table to disk
+*/
 void writeOtherFiles(const std::unordered_map<std::string, uint32_t>& lexicon, 
     const std::vector<std::string>& termToWord,
     const std::unordered_map<uint32_t, size_t>& pageTable) {

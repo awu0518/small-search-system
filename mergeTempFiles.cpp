@@ -14,9 +14,10 @@ struct queueObject {
     int streamNum;
 };
 
+// comparison functor for priority queue to be min-heap
 struct ComparePacked {
     bool operator()(const queueObject& a, const queueObject& b) const {
-        return a.packedNum > b.packedNum;  // min-heap
+        return a.packedNum > b.packedNum; 
     }
 };
 
@@ -28,7 +29,7 @@ int main() {
     std::vector<std::thread> threads;
     threads.reserve(NUM_MERGE);
 
-    for (int i = 0; i < NUM_MERGE; i++) {
+    for (int i = 0; i < NUM_MERGE; i++) { // merge groups of NUM_MERGE into 1, resulting in NUM_FILES / NUM_MERGE semi-merged files
         threads.emplace_back(mergeFiles, NUM_MERGE * i, "tempFiles/temp", "tempFilesMerged/temp" + std::to_string(i));
     }
 
@@ -36,7 +37,7 @@ int main() {
         threads[i].join();
     }
 
-    mergeFiles(0, "tempFilesMerged/temp", "mergedPreIndex");
+    mergeFiles(0, "tempFilesMerged/temp", "mergedPreIndex"); // merge 16 files into 1
 }
 
 void mergeFiles(int startNum, const std::string& path, const std::string& writePath) {
@@ -52,22 +53,22 @@ void mergeFiles(int startNum, const std::string& path, const std::string& writeP
     std::vector<std::queue<queueObject>> inputBuffers(NUM_MERGE);
     std::priority_queue<queueObject, std::vector<queueObject>, ComparePacked> heap;
 
-    for (int i = 0; i < NUM_MERGE; i++) {
+    for (int i = 0; i < NUM_MERGE; i++) { // get initial state for buffers and move one element to heap
         readIntoQueue(inputStreams[i], inputBuffers[i], i);
         heap.push(inputBuffers[i].front());
         inputBuffers[i].pop();
     }
 
-    while (!heap.empty()) {
+    while (!heap.empty()) { // when removing an item from the heap, attempt to replace it with the next element from the same buffer
         queueObject currObject = heap.top();
         heap.pop();
 
         outputStream << currObject.packedNum << " " << currObject.freq << " ";
 
         int currStream = currObject.streamNum;
-        if (inputBuffers[currStream].empty()) { 
+        if (inputBuffers[currStream].empty()) { // refill buffer if empty
             readIntoQueue(inputStreams[currStream], inputBuffers[currStream], currStream); 
-            if (inputBuffers[currStream].empty()) { continue; }
+            if (inputBuffers[currStream].empty()) { continue; } // if no more items, don't push
         }
 
         heap.push(inputBuffers[currStream].front());
