@@ -39,7 +39,7 @@ int main() {
 
     std::string line = ""; 
     for (int i = 0; i < NUM_FILES; i++) {
-        for (int i = 0; i < FILE_PER_DOC && std::getline(collection, line); i++) {
+        for (int j = 0; i < FILE_PER_DOC && std::getline(collection, line); j++) {
         size_t tab = line.find('\t');
 
         uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
@@ -57,6 +57,8 @@ int main() {
             buffer.push_back(pack(lexicon[token], docId));
             }
         }
+
+        if (buffer.empty()) { break; }
 
         std::sort(buffer.begin(), buffer.end());
         writeTempFile(buffer, i);
@@ -131,7 +133,7 @@ Given a vector of packed integers, groups together all the numbers so we get fil
 TODO: consider impact score instead of freq -> will need size of token vector from earlier
 */
 void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
-    std::string fileName = "tempFiles/temp" + std::to_string(iter);;
+    std::string fileName = "tempFiles/temp" + std::to_string(iter);
     std::ofstream output(fileName);
     if (!output) { std::cerr << "Failed to open stream for temp file"; exit(1); }
 
@@ -145,7 +147,7 @@ void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
             currCount = 1;
         }
     }
-
+    output << currNum << " " << currCount << " "; // for final object
     output.close();
 }
 
