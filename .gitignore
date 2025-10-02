@@ -1,5 +1,8 @@
 collection.tsv
 readCollection
+mergeTempFiles
 /tempFiles
+/tempFilesMerged
+mergedPreIndex
 *exe
 *py
