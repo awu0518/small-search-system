@@ -39,24 +39,24 @@ int main() {
 
     std::string line = ""; 
     for (int i = 0; i < NUM_FILES; i++) {
-        for (int j = 0; i < FILE_PER_DOC && std::getline(collection, line); j++) {
-        size_t tab = line.find('\t');
+        for (int j = 0; j < FILE_PER_DOC && std::getline(collection, line); j++) {
+            size_t tab = line.find('\t');
 
-        uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
-        std::string passage = line.substr(tab+1);
+            uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
+            std::string passage = line.substr(tab+1);
 
-        tokenizeString(passage, tokens);
-        pageTable.insert({docId, tokens.size()});
+            tokenizeString(passage, tokens);
+            pageTable.insert({docId, tokens.size()});
 
-        for (const std::string& token : tokens) {
-            if (lexicon.find(token) == lexicon.end()) {
-                lexicon.insert({token, currTermID++});
-                termToWord.push_back(token);
+            for (const std::string& token : tokens) {
+                if (lexicon.find(token) == lexicon.end()) {
+                    lexicon.insert({token, currTermID++});
+                    termToWord.push_back(token);
+                }
+
+                buffer.push_back(pack(lexicon[token], docId));
+                }
             }
-
-            buffer.push_back(pack(lexicon[token], docId));
-            }
-        }
 
         if (buffer.empty()) { break; }
 

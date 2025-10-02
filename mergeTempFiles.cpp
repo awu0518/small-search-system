@@ -65,8 +65,10 @@ void mergeFiles(int startNum, const std::string& path, const std::string& writeP
         outputStream << currObject.packedNum << " " << currObject.freq << " ";
 
         int currStream = currObject.streamNum;
-        if (inputBuffers[currStream].empty()) { readIntoQueue(inputStreams[currStream], inputBuffers[currStream], currStream); }
-        if (inputBuffers[currStream].empty()) { continue; }
+        if (inputBuffers[currStream].empty()) { 
+            readIntoQueue(inputStreams[currStream], inputBuffers[currStream], currStream); 
+            if (inputBuffers[currStream].empty()) { continue; }
+        }
 
         heap.push(inputBuffers[currStream].front());
         inputBuffers[currStream].pop();
