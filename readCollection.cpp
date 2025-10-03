@@ -18,8 +18,7 @@ uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
 void writeTempFile(const std::vector<uint64_t>& buffer, int iter);
-void writeOtherFiles(const std::unordered_map<std::string, uint32_t>& lexicon, 
-    const std::vector<std::string>& termToWord,
+void writeOtherFiles(const std::vector<std::string>& termToWord,
     const std::unordered_map<uint32_t, size_t>& pageTable);
 
 
@@ -67,7 +66,7 @@ int main() {
 
     collection.close();
 
-    writeOtherFiles(lexicon, termToWord, pageTable);
+    writeOtherFiles(termToWord, pageTable);
     return 0;
 }
 
@@ -155,16 +154,8 @@ void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
 /*
 Writes the lexicon v1, termToWord, and page table to disk
 */
-void writeOtherFiles(const std::unordered_map<std::string, uint32_t>& lexicon, 
-    const std::vector<std::string>& termToWord,
+void writeOtherFiles(const std::vector<std::string>& termToWord,
     const std::unordered_map<uint32_t, size_t>& pageTable) {
-
-    std::ofstream lexiconOutput("tempFiles/lexicon");
-    if (!lexiconOutput) { std::cerr << "Failed to open stream for lexicon"; exit(1); }
-    for (const auto& entry : lexicon) {
-        lexiconOutput << entry.first << " " << entry.second << " ";
-    }
-    lexiconOutput.close();
 
     std::ofstream termToWordOutput("tempFiles/termToWord");
     if (!termToWordOutput) { std::cerr << "Failed to open stream for termToWord"; exit(1); }
