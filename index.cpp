@@ -18,15 +18,17 @@ int main() {
 
     uint64_t packedNum; int freq;
     while (preIndex) {
-        Chunk currChunk;
-    
-        for (int i = 0; i < CHUNK_SIZE && preIndex >> packedNum >> freq; i++) {
+        Chunk currChunk{};
+        int i = 0;
+        for (; i < CHUNK_SIZE && preIndex >> packedNum >> freq; i++) {
             uint32_t termID = unpackTermID(packedNum);
             uint32_t docID = unpackDocID(packedNum);
 
             currChunk.docIds[i] = docID;
             currChunk.freq[i] = freq;
         }
+
+        if (i == 0) { break; }
     }
 }
 
