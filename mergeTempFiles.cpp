@@ -5,6 +5,7 @@
 #include <string>
 #include <filesystem>
 #include <thread>
+#include <cstdint>
 
 const int NUM_MERGE = 16;
 
