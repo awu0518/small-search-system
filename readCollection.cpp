@@ -14,8 +14,6 @@ const int FILE_PER_DOC = 34539; //
 const int NUM_FILES = 256; // 256
 
 uint64_t pack(uint32_t termID, uint32_t docID);
-uint32_t unpackTermID(uint64_t pack);
-uint32_t unpackDocID(uint64_t pack);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
 void writeTempFile(const std::vector<uint64_t>& buffer, int iter);
 void writeOtherFiles(const std::vector<std::string>& termToWord,
@@ -76,20 +74,6 @@ Returns a 64 bit unsigned integer in the following representation:
 */
 uint64_t pack(uint32_t termID, uint32_t docID) {
     return (uint64_t(termID) << 32) | docID;
-}
-
-/*
-Returns the first 32 bits of the packed number, which is the termID
-*/
-uint32_t unpackTermID(uint64_t pack) {
-    return uint32_t(pack >> 32);
-}
-
-/*
-Returns the last 32 bits of the packed number, which is the docID
-*/
-uint32_t unpackDocID(uint64_t pack) {
-    return uint32_t(pack & 0xffffffffu);
 }
 
 /*
