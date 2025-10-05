@@ -54,7 +54,7 @@ int main() {
     uint64_t packedNum;
     std::vector<std::uint32_t> docid_list;
     std::vector<std::uint8_t> freq_list;
-    std::unordered_map<uint32_t, std::vector<std::uint32_t>> lexicon; // will map termid to [byte start, byte end]
+    std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> lexicon; // will map termid to [byte start, byte end]
 
     uint32_t prevTermID = 0;
     while (count < 10){ 
