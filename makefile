@@ -2,18 +2,21 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -pedantic -g
 
-# Target executable name
-TARGET = readCollection
-
-# Source files
-SRC = readCollection.cpp
+# Executable names
+TARGETS = readCollection.exe merge.exe index.exe
 
 # Default rule
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
+readCollection.exe: readCollection.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+merge.exe: mergeTempFiles.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+index.exe: index.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
 # Clean rule
 clean:
-	rm -f $(TARGET) *.o
+	del /Q $(TARGETS) 2>nul || true

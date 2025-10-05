@@ -10,8 +10,8 @@
 #include <regex>
 #include <filesystem>
 
-const int FILE_PER_DOC = 34539;
-const int NUM_FILES = 256;
+const int FILE_PER_DOC = 34539; // 
+const int NUM_FILES = 256; // 256
 
 uint64_t pack(uint32_t termID, uint32_t docID);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
@@ -22,6 +22,7 @@ void writeOtherFiles(const std::vector<std::string>& termToWord,
 
 int main() {
     std::filesystem::create_directory("tempFiles");
+
     std::ifstream collection("collection.tsv");
     if (!collection) { std::cerr << "Unable to open collection.tsv"; exit(1); }
 
@@ -38,12 +39,12 @@ int main() {
     for (int i = 0; i < NUM_FILES; i++) {
         for (int j = 0; j < FILE_PER_DOC && std::getline(collection, line); j++) {
             size_t tab = line.find('\t');
-
+            // std::cout << j << std::endl;
             uint32_t docId = static_cast<uint32_t>(std::stoul(line.substr(0, tab)));
             std::string passage = line.substr(tab+1);
 
             tokenizeString(passage, tokens);
-            pageTable.insert({docId, tokens.size()});
+            pageTable.insert({docId, tokens.size()}); // update page table with new docid
 
             for (const std::string& token : tokens) {
                 if (lexicon.find(token) == lexicon.end()) { // checks if word already has a termID
@@ -61,7 +62,6 @@ int main() {
         writeTempFile(buffer, i);
         buffer.clear();
     }
-
     collection.close();
 
     writeOtherFiles(termToWord, pageTable);
@@ -84,7 +84,7 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     tokens.clear();
     const static std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
     std::string tempString;
-
+    
     for (char ch : line) {
         if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
         else if (ch == '.') {tempString.push_back('.');} // we need to keep '.'
@@ -130,6 +130,7 @@ void writeTempFile(const std::vector<uint64_t>& buffer, int iter) {
             currNum = buffer[i];
             currCount = 1;
         }
+        // output << std::endl;
     }
     output << currNum << " " << currCount << " "; // for final object
     output.close();
