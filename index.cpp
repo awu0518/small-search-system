@@ -13,6 +13,8 @@
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 
+void encodeNum(std::ofstream& output, uint32_t num);
+
 class Chunk{
     public:
     std::vector<std::uint32_t> docIDList;
@@ -108,4 +110,22 @@ Returns the last 32 bits of the packed number, which is the docID
 */
 uint32_t unpackDocID(uint64_t pack) {
     return uint32_t(pack & 0xffffffffu);
+}
+
+/*
+Writes a number compressed using varbyte as bytes into an output stream
+
+If a number is greater than 127, we write the upper bytes with a 1 in the first bit to indicate
+the number continues into the next byte, and write the remaining 7 bits of that first byte.
+
+At the end its guaranteed to fit within a 7 bit number
+*/
+void encodeNum(std::ofstream& output, uint32_t num) {
+    while (num >= 128) {
+        uint8_t currByte = 128 + (num & 127);
+        output.write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));
+        num = num >> 7;
+    }
+
+    output.write(reinterpret_cast<const char*>(&num), sizeof(uint8_t));
 }
