@@ -15,6 +15,7 @@ using namespace std; // fuck u alex
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void arrDifferences(uint32_t* arr, int size);
+void encodeNum(std::ofstream* output, uint32_t num);
 void printArr(void* arr, int size);
 const int CHUNK_LIST_SIZE = 128;
 const int NUM_CHUNKS = 10;
@@ -26,6 +27,9 @@ public:
     // might be nice to have. we might do the compression in a function outside of the classs
     // Then again we could also do it in the class but idk
     Chunk(){
+        reset();
+    }
+    void reset(){
         memset(docIDList, 0, sizeof(docIDList));
         memset(freqList, 0, sizeof(freqList));
     }
@@ -45,16 +49,12 @@ class Block {
     std::ofstream* metaFile;
 
     Block(std::ofstream* indexFile, std::ofstream* metaFile){
-        currChunkInd = 0;
-        currListInd = 0;
         this->indexFile = indexFile;
         this->metaFile = metaFile;
-        memset(lastDocID, 0, sizeof(lastDocID));
-        memset(docIDSizes, 0, sizeof(docIDSizes));
-        memset(freqSizes, 0, sizeof(freqSizes));
+        reset();
     }
-    bool addToChunk(uint32_t newID, uint8_t newFreq,
-            std::vector<uint32_t>* blockLocations){
+        
+    uint32_t addToChunk(uint32_t newID, uint8_t newFreq){
         chunks[currChunkInd].docIDList[currListInd] = newID; // append to docid list
         chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
         currListInd++;
@@ -66,10 +66,11 @@ class Block {
             currChunkInd++;
             currListInd = 0;
         }
-        if (currChunkInd == 10){
-            currChunkInd = 0;
-            currListInd = 0;
-            flush(blockLocations);
+        if (currChunkInd == 10){ // need some way to update metadata for the flush when incomplete block
+            flush(); // putting this here before changing currChunkInd = 0
+            // the idea is that I can call flush() in main() after reading ends from index file
+            // to flush out an incomplete block
+            reset();
             return true;
         }
         return false;
@@ -77,12 +78,22 @@ class Block {
     Chunk* currChunk(){
         return &(chunks[currChunkInd]);
     }
-    void flush(std::vector<uint32_t>* blockLocations){// to flush contents into a file
-        flushMetaData();
-        for (int i=0;i<10;i++){
+    void flush(){// to flush contents into a file
+        for (int i=0;i<currChunkInd;i++){
+            for (int j=0;j < 128 && chunks[i].freqList[j] != 0; j++){
+                // chunks[i].freqList[j] != 0 becuase a freq can never be 0. If we reach this point in the list
+                // it means the curr pos in the list hasnt been written to 
+                encodeNum(indexFile, chunks[i].docIDList[j]);
+            }
+            for (int j=0;j < 128 && chunks[i].freqList[j] != 0; j++){
+                indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
+            }
         }
+        flushMetaData();
+
     } 
     void flushMetaData(){
+        
         for (int i=0;i<10;i++){
             *metaFile << lastDocID[i] << " ";
         }
@@ -91,6 +102,17 @@ class Block {
         }
         for (int i=0;i<10;i++){
             *metaFile << freqSizes[i] << " ";
+        }
+        *metaFile << std::endl;
+    }
+    void reset(){
+        currChunkInd = 0;
+        currListInd = 0;
+        memset(lastDocID, 0, sizeof(lastDocID));
+        memset(docIDSizes, 0, sizeof(docIDSizes));
+        memset(freqSizes, 0, sizeof(freqSizes));
+        for (int i=0;i<10;i++){
+            chunks[i].reset();
         }
     }
 };
@@ -132,7 +154,7 @@ int main() {
             lexicon[prevTermID].second = currBlock;
             startBlock = currBlock;
         }
-        if (bufferBlock.addToChunk(docid, (uint8_t)freq, &blockLocations)){
+        if (bufferBlock.addToChunk(docid, (uint8_t)freq)){
             currBlock++;
         }
         
@@ -145,6 +167,9 @@ int main() {
     for (int i=0;i<128;i++){
         cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
     }
+    cout << endl;
+    bufferBlock.currChunkInd++;
+    bufferBlock.flush();
     
 }
 
@@ -174,12 +199,29 @@ void printArr(void* arr, int size){
 }
 
 void arrDifferences(uint32_t* arr, int size){
-    cout << "after: ";
     for (int i=size-1; i>1; i--){
         arr[i] = arr[i] - arr[i-1];
     }
 }
 
+/*
+Writes a number compressed using varbyte as bytes into an output stream
+
+If a number is greater than 127, we write the upper bytes with a 1 in the first bit to indicate
+the number continues into the next byte, and write the remaining 7 bits of that first byte.
+
+At the end its guaranteed to fit within a 7 bit number
+*/
+void encodeNum(std::ofstream* output, uint32_t num) {
+    while (num >= 128) {
+        uint8_t currByte = 128 + (num & 127);
+        output->write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));
+        num = num >> 7;
+    }
+
+    uint8_t last = static_cast<uint8_t>(num);
+    output->write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
+}
 
 /*
 while loading stuff form file:
