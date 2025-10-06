@@ -27,7 +27,7 @@ int main() {
 
     output.close();
 
-    std::ifstream input("testVarByte");
+    std::ifstream input("testVarByte", std::ios::binary);
     if (!input) { std::cerr << "could not open testVarByte for reading"; exit(1); }
 
     std::cout << decodeNum(input) << std::endl;
