@@ -10,56 +10,111 @@
 #include <algorithm>
 #include <regex>
 #include <filesystem>
+using namespace std; // fuck u alex
+
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
-
+void arrDifferences(uint32_t* arr, int size);
+void printArr(void* arr, int size);
+const int CHUNK_LIST_SIZE = 128;
+const int NUM_CHUNKS = 10;
 class Chunk{
-    public:
-    std::vector<std::uint32_t> docIDList;
-    std::vector<std::uint32_t> freqList;
-    Chunk(){}
+public:
+
+    uint32_t docIDList[CHUNK_LIST_SIZE];
+    uint8_t freqList[CHUNK_LIST_SIZE];
     // might be nice to have. we might do the compression in a function outside of the classs
     // Then again we could also do it in the class but idk
-    Chunk(std::vector<std::uint32_t>& docIDs){
-        for (uint32_t docid: docIDs){
-            docIDList.push_back(docid);
-        }
+    Chunk(){
+        memset(docIDList, 0, sizeof(docIDList));
+        memset(freqList, 0, sizeof(freqList));
     }
 };
 
 class Block {
     public:
     // the fields are the meta data
-    // we only rly need this stuff for when we print this into a file and so we easily 
-    // figure it out when looping through the chunk vectors but why not make out lives
-    // easy and keep them here so debugging is less hell
-    std::vector<std::uint32_t> lastDocID;
-    std::vector<std::uint32_t> docIDSizes;
-    std::vector<std::uint32_t> freqSizes;
-    std::vector<Chunk> chunks;
-    Block(){
+    uint32_t lastDocID[NUM_CHUNKS];
+    uint32_t docIDSizes[NUM_CHUNKS]; // sizes of each list of docids
+    uint32_t freqSizes[NUM_CHUNKS]; 
+
+    Chunk chunks[NUM_CHUNKS];
+    int currChunkInd; // keep track of which chunk we at
+    int currListInd; // which ind we are in the list of each chunk
+    std::ofstream* indexFile;
+    std::ofstream* metaFile;
+
+    Block(std::ofstream* indexFile, std::ofstream* metaFile){
+        currChunkInd = 0;
+        currListInd = 0;
+        this->indexFile = indexFile;
+        this->metaFile = metaFile;
+        memset(lastDocID, 0, sizeof(lastDocID));
+        memset(docIDSizes, 0, sizeof(docIDSizes));
+        memset(freqSizes, 0, sizeof(freqSizes));
+    }
+    bool addToChunk(uint32_t newID, uint8_t newFreq,
+            std::vector<uint32_t>* blockLocations){
+        chunks[currChunkInd].docIDList[currListInd] = newID; // append to docid list
+        chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
+        currListInd++;
+        if (currListInd == 128){
+            docIDSizes[currChunkInd] = (128*4); // idk lets record in bytes
+            freqSizes[currChunkInd] = (128);
+            arrDifferences(chunks[currChunkInd].docIDList, 128); // the substraction thing on the docids
+            currChunkInd++;
+            currListInd = 0;
+        }
+        if (currChunkInd == 10){
+            currChunkInd = 0;
+            currListInd = 0;
+            flush(blockLocations);
+            return true;
+        }
+        return false;
+    }
+    Chunk* currChunk(){
+        return &(chunks[currChunkInd]);
+    }
+    void flush(std::vector<uint32_t>* blockLocations){// to flush contents into a file
+        flushMetaData();
         for (int i=0;i<10;i++){
-            chunks.push_back(Chunk()); // init 10 of these chunks (for now)
+        }
+    } 
+    void flushMetaData(){
+        for (int i=0;i<10;i++){
+            *metaFile << lastDocID[i] << " ";
+        }
+        for (int i=0;i<10;i++){
+            *metaFile << docIDSizes[i] << " ";
+        }
+        for (int i=0;i<10;i++){
+            *metaFile << freqSizes[i] << " ";
         }
     }
-    void flush(){} // to flush contents into a file
 };
 
-using namespace std; // fuck u alex
 int main() {
     std::ifstream preind("mergedPreIndex");
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
+    std::ofstream index("index.txt");
+    std::ofstream metaData("metaData.txt");
+
     int count = 0;
     uint32_t freq;
     uint64_t packedNum;
-    std::vector<std::uint32_t> docid_list;
-    std::vector<std::uint8_t> freq_list;
-    std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> lexicon; // will map termid to [byte start, byte end]
+    std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> lexicon; // will map termid to [start block, end block]
+    std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
+    uint32_t startBlock = 0;
+    uint32_t currBlock = 0;
+
+    Block bufferBlock = Block(&index, &metaData);
 
     uint32_t prevTermID = 0;
-    while (count < 10){ 
+    while (count < 150){ 
         preind >> packedNum; // get the packed num
         preind >> freq; // next is the freq
+
         uint32_t termid;
         uint32_t docid;
         termid = unpackTermID(packedNum);
@@ -67,17 +122,61 @@ int main() {
         
         cout << termid << " " << docid << " " << freq << endl;
 
-        if (prevTermID == termid){
-            docid_list.push_back(docid);
-            freq_list.push_back((uint8_t)freq);
-        }
-        else {
+        
+        
+        if (prevTermID != termid){
             // make the docid list the diff of the numbers for compression
             // and get sum of all stuff
+            lexicon[prevTermID].first = startBlock;
+            lexicon[prevTermID].second = currBlock;
+            startBlock = currBlock;
         }
+        if (bufferBlock.addToChunk(docid, (uint8_t)freq, &blockLocations)){
+            currBlock++;
+        }
+        
+        prevTermID = termid;
         count++;
     }
+    cout << bufferBlock.currListInd << endl;
+    printArr(bufferBlock.currChunk()->docIDList, 128);
+    // printArr(bufferBlock.chunks[0].freqList, 128);
+    for (int i=0;i<128;i++){
+        cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
+    }
     
+}
+
+
+
+
+/*
+Returns the first 32 bits of the packed number, which is the termID
+*/
+uint32_t unpackTermID(uint64_t pack) {
+    return uint32_t(pack >> 32);
+}
+
+/*
+Returns the last 32 bits of the packed number, which is the docID
+*/
+uint32_t unpackDocID(uint64_t pack) {
+    return uint32_t(pack & 0xffffffffu);
+}
+
+void printArr(void* arr, int size){
+    for (int i=0;i<size;i++){
+        cout << ((int*)arr)[i] << " ";
+    }
+    cout << endl;
+
+}
+
+void arrDifferences(uint32_t* arr, int size){
+    cout << "after: ";
+    for (int i=size-1; i>1; i--){
+        arr[i] = arr[i] - arr[i-1];
+    }
 }
 
 
@@ -94,18 +193,3 @@ while loading stuff form file:
 
 
 */
-
-
-/*
-Returns the first 32 bits of the packed number, which is the termID
-*/
-uint32_t unpackTermID(uint64_t pack) {
-    return uint32_t(pack >> 32);
-}
-
-/*
-Returns the last 32 bits of the packed number, which is the docID
-*/
-uint32_t unpackDocID(uint64_t pack) {
-    return uint32_t(pack & 0xffffffffu);
-}
