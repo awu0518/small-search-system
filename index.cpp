@@ -59,6 +59,7 @@ class Block {
         chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
         currListInd++;
         if (currListInd == 128){
+            lastDocID[currChunkInd] = newID; // record the last docid in chunk
             docIDSizes[currChunkInd] = (128*4); // idk lets record in bytes
             freqSizes[currChunkInd] = (128);
             arrDifferences(chunks[currChunkInd].docIDList, 128); // the substraction thing on the docids
