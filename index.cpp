@@ -127,5 +127,6 @@ void encodeNum(std::ofstream& output, uint32_t num) {
         num = num >> 7;
     }
 
-    output.write(reinterpret_cast<const char*>(&num), sizeof(uint8_t));
+    uint8_t last = static_cast<uint8_t>(num);
+    output.write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
 }
