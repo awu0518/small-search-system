@@ -56,7 +56,7 @@ class Block {
         chunks[currChunkInd].docIDList[currListInd] = newID; // append to docid list
         chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
         currListInd++;
-        if (currListInd == 128){
+        if (currListInd == CHUNK_LIST_SIZE){
             lastDocID[currChunkInd] = newID; // record the last docid in chunk
             arrDifferences(chunks[currChunkInd].docIDList, 128); // the substraction thing on the docids
             currChunkInd++;
@@ -76,12 +76,12 @@ class Block {
     }
     void flush(){// to flush contents into a file
         for (int i=0;i<currChunkInd;i++){
-            for (int j=0;j < 128 && chunks[i].freqList[j] != 0; j++){
+            for (int j=0;j < CHUNK_LIST_SIZE && chunks[i].freqList[j] != 0; j++){
                 // chunks[i].freqList[j] != 0 becuase a freq can never be 0. If we reach this point in the list
                 // it means the curr pos in the list hasnt been written to 
                 encodeNum(indexFile, chunks[i].docIDList[j]);
             }
-            for (int j=0;j < 128 && chunks[i].freqList[j] != 0; j++){
+            for (int j=0;j < CHUNK_LIST_SIZE && chunks[i].freqList[j] != 0; j++){
                 indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
             }
         }
@@ -89,7 +89,7 @@ class Block {
 
     } 
     void flushMetaData(){
-        for (int i=0;i<10;i++){
+        for (int i=0;i<NUM_CHUNKS;i++){
             *metaFile << lastDocID[i] << " ";
         }
         *metaFile << std::endl;
@@ -98,7 +98,7 @@ class Block {
         currChunkInd = 0;
         currListInd = 0;
         memset(lastDocID, 0, sizeof(lastDocID));
-        for (int i=0;i<10;i++){
+        for (int i=0;i<NUM_CHUNKS;i++){
             chunks[i].reset();
         }
     }
@@ -185,8 +185,8 @@ void printArr(void* arr, int size){
 
 }
 
-void arrDifferences(uint32_t* arr, int size){
-    for (int i=size-1; i>1; i--){
+void arrDifferences(uint32_t* arr, int start, int end){
+    for (int i=end; i=start; i--){
         arr[i] = arr[i] - arr[i-1];
     }
 }
