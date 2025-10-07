@@ -15,10 +15,10 @@ using namespace std; // fuck u alex
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void arrDifferences(uint32_t* arr, int start, int end);
-void encodeNum(std::ofstream* output, uint32_t num);
+uint32_t encodeNum(std::ofstream* output, uint32_t num);
 void printArr(void* arr, int size);
 void readVector(std::vector<std::string>& words);
-
+void byteWrite(std::ofstream* output, uint32_t num, int size);
 const int CHUNK_LIST_SIZE = 128;
 const int NUM_CHUNKS = 10;
 class Chunk{
@@ -76,25 +76,28 @@ class Block {
     Chunk* currChunk(){
         return &(chunks[currChunkInd]); 
     }
-    void flush(){// to flush contents into a file
+    // to flush contents into a file. This code will assume the block it is 
+    // flushing is not the final block (not an incomplete one)
+    void flush(){
         for (int i=0;i<currChunkInd;i++){
-            for (int j=0;j < CHUNK_LIST_SIZE && chunks[i].freqList[j] != 0; j++){
-                // chunks[i].freqList[j] != 0 becuase a freq can never be 0. If we reach this point in the list
-                // it means the curr pos in the list hasnt been written to 
+            for (int j=0;j < CHUNK_LIST_SIZE; j++){
                 encodeNum(indexFile, chunks[i].docIDList[j]);
             }
-            for (int j=0;j < CHUNK_LIST_SIZE && chunks[i].freqList[j] != 0; j++){
+            for (int j=0;j < CHUNK_LIST_SIZE; j++){
                 indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
             }
         }
         flushMetaData();
-
     } 
+    // 
     void flushMetaData(){
         for (int i=0;i<NUM_CHUNKS;i++){
-            *metaFile << lastDocID[i] << " ";
+            byteWrite(metaFile, lastDocID[i], sizeof(uint32_t));
         }
         *metaFile << std::endl;
+    }
+    void flushLastBlock(){
+
     }
     void reset(){
         currChunkInd = 0;
@@ -117,7 +120,9 @@ int main() {
     std::ifstream preind("mergedPreIndex");
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
     std::ofstream index("index.txt");
+    if (!index) { std::cerr << "Unable to open index.txt"; exit(1); }
     std::ofstream metaData("metaData.txt");
+    if (!metaData) { std::cerr << "Unable to open metaData.txt"; exit(1); }
 
     int count = 0;
     uint32_t freq;
@@ -197,9 +202,13 @@ void printArr(void* arr, int size){
 }
 
 void arrDifferences(uint32_t* arr, int start, int end){
-    for (int i=end; i=start; i--){
+    for (int i=end; i==start; i--){
         arr[i] = arr[i] - arr[i-1];
     }
+}
+
+void byteWrite(std::ofstream* output, uint32_t num, int size){
+    output->write(reinterpret_cast<const char*>(&num), size);
 }
 
 /*
@@ -210,15 +219,18 @@ the number continues into the next byte, and write the remaining 7 bits of that 
 
 At the end its guaranteed to fit within a 7 bit number
 */
-void encodeNum(std::ofstream* output, uint32_t num) {
+uint32_t encodeNum(std::ofstream* output, uint32_t num) {
+    uint32_t size = 1;
     while (num >= 128) {
         uint8_t currByte = 128 + (num & 127);
         output->write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));
         num = num >> 7;
+        size++;
     }
 
     uint8_t last = static_cast<uint8_t>(num);
     output->write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
+    return size;
 }
 
 void readVector(std::vector<std::string>& words) {
