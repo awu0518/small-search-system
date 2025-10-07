@@ -58,7 +58,7 @@ class Block {
         currListInd++;
         if (currListInd == CHUNK_LIST_SIZE){
             lastDocID[currChunkInd] = newID; // record the last docid in chunk
-            arrDifferences(chunks[currChunkInd].docIDList, 128); // the substraction thing on the docids
+            arrDifferences(chunks[currChunkInd].docIDList, 0, 128); // the substraction thing on the docids
             currChunkInd++;
             currListInd = 0;
         }
