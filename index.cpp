@@ -39,8 +39,6 @@ class Block {
     public:
     // the fields are the meta data
     uint32_t lastDocID[NUM_CHUNKS];
-    uint32_t docIDSizes[NUM_CHUNKS]; // sizes of each list of docids
-    uint32_t freqSizes[NUM_CHUNKS]; 
 
     Chunk chunks[NUM_CHUNKS];
     int currChunkInd; // keep track of which chunk we at
@@ -60,8 +58,6 @@ class Block {
         currListInd++;
         if (currListInd == 128){
             lastDocID[currChunkInd] = newID; // record the last docid in chunk
-            docIDSizes[currChunkInd] = (128*4); // idk lets record in bytes
-            freqSizes[currChunkInd] = (128);
             arrDifferences(chunks[currChunkInd].docIDList, 128); // the substraction thing on the docids
             currChunkInd++;
             currListInd = 0;
@@ -93,15 +89,8 @@ class Block {
 
     } 
     void flushMetaData(){
-        
         for (int i=0;i<10;i++){
             *metaFile << lastDocID[i] << " ";
-        }
-        for (int i=0;i<10;i++){
-            *metaFile << docIDSizes[i] << " ";
-        }
-        for (int i=0;i<10;i++){
-            *metaFile << freqSizes[i] << " ";
         }
         *metaFile << std::endl;
     }
@@ -109,8 +98,6 @@ class Block {
         currChunkInd = 0;
         currListInd = 0;
         memset(lastDocID, 0, sizeof(lastDocID));
-        memset(docIDSizes, 0, sizeof(docIDSizes));
-        memset(freqSizes, 0, sizeof(freqSizes));
         for (int i=0;i<10;i++){
             chunks[i].reset();
         }
