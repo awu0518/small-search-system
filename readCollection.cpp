@@ -82,28 +82,17 @@ nonalphanumeric characters except those within words
 */
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     tokens.clear();
-    const static std::regex pattern(R"(\b[A-Za-z](?:\.[A-Za-z]){1,2}\.?\b)");
     std::string tempString;
     
     for (char ch : line) {
         if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
-        else if (ch == '.') {tempString.push_back('.');} // we need to keep '.'
-        else if (ch == ' ') { // tokenize by space
+        else { 
             if (tempString.size() == 0) { continue; }
-            if (!std::regex_search(tempString, pattern)
-                && tempString.back() == '.'){ // if this isn't a match we don't
-                tempString.pop_back(); // need the '.' in it
-            } 
             tokens.push_back(tempString);
             tempString.clear();
-            
         }
     }
     if (!tempString.empty()){
-        if (!std::regex_search(tempString, pattern)
-            && tempString.back() == '.'){ 
-            tempString.pop_back(); 
-        }
         tokens.push_back(tempString);
         tempString.clear();
     }

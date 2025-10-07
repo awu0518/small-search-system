@@ -3,7 +3,7 @@ CXX = g++
 CXXFLAGS = -Wall -Wextra -pedantic -g
 
 # Executable names
-TARGETS = readCollection.exe merge.exe index.exe
+TARGETS = readCollection.exe merge.exe index.exe 
 
 # Default rule
 all: $(TARGETS)
