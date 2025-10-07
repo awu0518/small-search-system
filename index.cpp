@@ -119,7 +119,7 @@ int main() {
     std::vector<std::string> termToWord;
     readVector(termToWord); 
 
-    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> lexicon; // will map termid to [start block, end block]
+    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> lexicon; // maps word (string) to [start block, end block]
     std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
     uint32_t startBlock = 0;
     uint32_t currBlock = 0;
