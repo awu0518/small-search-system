@@ -17,6 +17,8 @@ uint32_t unpackDocID(uint64_t pack);
 void arrDifferences(uint32_t* arr, int start, int end);
 void encodeNum(std::ofstream* output, uint32_t num);
 void printArr(void* arr, int size);
+void readVector(std::vector<std::string>& words);
+
 const int CHUNK_LIST_SIZE = 128;
 const int NUM_CHUNKS = 10;
 class Chunk{
@@ -72,7 +74,7 @@ class Block {
         return false;
     }
     Chunk* currChunk(){
-        return &(chunks[currChunkInd]);
+        return &(chunks[currChunkInd]); 
     }
     void flush(){// to flush contents into a file
         for (int i=0;i<currChunkInd;i++){
@@ -113,7 +115,11 @@ int main() {
     int count = 0;
     uint32_t freq;
     uint64_t packedNum;
-    std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> lexicon; // will map termid to [start block, end block]
+
+    std::vector<std::string> termToWord;
+    readVector(termToWord); 
+
+    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> lexicon; // maps word (string) to [start block, end block]
     std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
     uint32_t startBlock = 0;
     uint32_t currBlock = 0;
@@ -208,6 +214,15 @@ void encodeNum(std::ofstream* output, uint32_t num) {
 
     uint8_t last = static_cast<uint8_t>(num);
     output->write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
+}
+
+void readVector(std::vector<std::string>& words) {
+    std::ifstream termToWord("tempFiles/termToWord");
+    if (!termToWord) { std::cerr << "Failed to open termToWord\n"; exit(1); }
+
+    std::string holder;
+    while (termToWord >> holder) { words.push_back(holder); }
+    termToWord.close();
 }
 
 /*
