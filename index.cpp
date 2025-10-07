@@ -47,10 +47,12 @@ class Block {
     uint8_t currListInd; // which ind we are in the list of each chunk
     std::ofstream* indexFile;
     std::ofstream* metaFile;
+    std::ofstream* blockLocation;
 
-    Block(std::ofstream* indexFile, std::ofstream* metaFile){
+    Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* blockLocation){
         this->indexFile = indexFile;
         this->metaFile = metaFile;
+        this->blockLocation = blockLocation;
         reset();
     }
         
@@ -77,6 +79,7 @@ class Block {
         return &(chunks[currChunkInd]); 
     }
     void flush(){// to flush contents into a file
+        static uint32_t currBlock = 0;
         for (int i=0;i<currChunkInd;i++){
             for (int j=0;j < CHUNK_LIST_SIZE && chunks[i].freqList[j] != 0; j++){
                 // chunks[i].freqList[j] != 0 becuase a freq can never be 0. If we reach this point in the list
@@ -87,6 +90,9 @@ class Block {
                 indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
             }
         }
+
+        *blockLocation << currBlock++ << " " << blockLocation->tellp() << " ";
+
         flushMetaData();
 
     } 
@@ -118,6 +124,9 @@ int main() {
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
     std::ofstream index("index.txt");
     std::ofstream metaData("metaData.txt");
+    std::ofstream blockLocation("blockLocation");
+
+    if (!index || !metaData || !blockLocation) { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
 
     int count = 0;
     uint32_t freq;
@@ -127,11 +136,10 @@ int main() {
     readVector(termToWord); 
 
     std::unordered_map<std::string, lexiconData> lexicon; // maps word (string) to [start block, end block]
-    std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
     uint32_t startBlock = 0;
     uint32_t currBlock = 0;
 
-    Block bufferBlock = Block(&index, &metaData);
+    Block bufferBlock = Block(&index, &metaData, &blockLocation);
 
     uint32_t prevTermID = 0;
     uint32_t termCount = 0;
