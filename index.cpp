@@ -43,8 +43,8 @@ class Block {
     uint32_t lastDocID[NUM_CHUNKS];
 
     Chunk chunks[NUM_CHUNKS];
-    int currChunkInd; // keep track of which chunk we at
-    int currListInd; // which ind we are in the list of each chunk
+    uint8_t currChunkInd; // keep track of which chunk we at
+    uint8_t currListInd; // which ind we are in the list of each chunk
     std::ofstream* indexFile;
     std::ofstream* metaFile;
 
@@ -106,6 +106,13 @@ class Block {
     }
 };
 
+struct lexiconData {
+    uint32_t blockNum;
+    uint8_t chunkNum;
+    uint8_t chunkPos;
+    uint32_t listLen;
+};
+
 int main() {
     std::ifstream preind("mergedPreIndex");
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
@@ -119,7 +126,7 @@ int main() {
     std::vector<std::string> termToWord;
     readVector(termToWord); 
 
-    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> lexicon; // maps word (string) to [start block, end block]
+    std::unordered_map<std::string, lexiconData> lexicon; // maps word (string) to [start block, end block]
     std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
     uint32_t startBlock = 0;
     uint32_t currBlock = 0;
@@ -127,6 +134,7 @@ int main() {
     Block bufferBlock = Block(&index, &metaData);
 
     uint32_t prevTermID = 0;
+    uint32_t termCount = 0;
     while (count < 150){ 
         preind >> packedNum; // get the packed num
         preind >> freq; // next is the freq
@@ -137,21 +145,18 @@ int main() {
         docid = unpackDocID(packedNum);
         
         cout << termid << " " << docid << " " << freq << endl;
-
-        
         
         if (prevTermID != termid){
-            // make the docid list the diff of the numbers for compression
-            // and get sum of all stuff
-            lexicon[prevTermID].first = startBlock;
-            lexicon[prevTermID].second = currBlock;
+            lexicon[termToWord[prevTermID]] = lexiconData{startBlock, bufferBlock.currChunkInd, bufferBlock.currListInd, termCount};
             startBlock = currBlock;
+            termCount = 0;
         }
         if (bufferBlock.addToChunk(docid, (uint8_t)freq)){
             currBlock++;
         }
         
         prevTermID = termid;
+        termCount++;
         count++;
     }
     cout << bufferBlock.currListInd << endl;
