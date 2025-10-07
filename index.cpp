@@ -91,7 +91,7 @@ class Block {
             }
         }
 
-        *blockLocation << currBlock++ << " " << blockLocation->tellp() << " ";
+        *blockLocation << currBlock++ << " " << indexFile->tellp() << " ";
 
         flushMetaData();
 
