@@ -14,7 +14,7 @@ using namespace std; // fuck u alex
 
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
-void arrDifferences(uint32_t* arr, int size);
+void arrDifferences(uint32_t* arr, int start, int end);
 void encodeNum(std::ofstream* output, uint32_t num);
 void printArr(void* arr, int size);
 const int CHUNK_LIST_SIZE = 128;
