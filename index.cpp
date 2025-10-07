@@ -47,10 +47,12 @@ class Block {
     uint8_t currListInd; // which ind we are in the list of each chunk
     std::ofstream* indexFile;
     std::ofstream* metaFile;
+    std::ofstream* blockLocation;
 
-    Block(std::ofstream* indexFile, std::ofstream* metaFile){
+    Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* blockLocation){
         this->indexFile = indexFile;
         this->metaFile = metaFile;
+        this->blockLocation = blockLocation;
         reset();
     }
         
@@ -76,9 +78,10 @@ class Block {
     Chunk* currChunk(){
         return &(chunks[currChunkInd]); 
     }
+    void flush(){// to flush contents into a file
+        static uint32_t currBlock = 0;
     // to flush contents into a file. This code will assume the block it is 
     // flushing is not the final block (not an incomplete one)
-    void flush(){
         for (int i=0;i<currChunkInd;i++){
             for (int j=0;j < CHUNK_LIST_SIZE; j++){
                 encodeNum(indexFile, chunks[i].docIDList[j]);
@@ -87,6 +90,9 @@ class Block {
                 indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
             }
         }
+
+        *blockLocation << currBlock++ << " " << indexFile->tellp() << " ";
+
         flushMetaData();
     } 
     // 
@@ -97,6 +103,22 @@ class Block {
         *metaFile << std::endl;
     }
     void flushLastBlock(){
+        // flush out all the complete chunks before the one we are currently on
+        // The one we are curr on is the incomplete one
+        for (int i=0;i<currChunkInd;i++){
+            for (uint32_t docid: lastDocID){
+                byteWrite(metaFile, docid, sizeof(uint32_t));
+            }
+        }
+        // currListInd should tell us if there are leftovers in the curr chunk
+        // and where it is
+        for (int i=0;i<currListInd;i++){
+            if (chunks[currChunkInd].freqList[i+1] != 0){
+                byteWrite(metaFile, chunks[currChunkInd].docIDList[i], sizeof(uint32_t));
+            }
+        }
+        byteWrite(metaFile, currListInd == 0 ? currChunkInd-1: currChunkInd, sizeof(uint32_t));
+
 
     }
     void reset(){
@@ -120,9 +142,10 @@ int main() {
     std::ifstream preind("mergedPreIndex");
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
     std::ofstream index("index.txt");
-    if (!index) { std::cerr << "Unable to open index.txt"; exit(1); }
     std::ofstream metaData("metaData.txt");
-    if (!metaData) { std::cerr << "Unable to open metaData.txt"; exit(1); }
+    std::ofstream blockLocation("blockLocation");
+
+    if (!index || !metaData || !blockLocation) { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
 
     int count = 0;
     uint32_t freq;
@@ -132,11 +155,10 @@ int main() {
     readVector(termToWord); 
 
     std::unordered_map<std::string, lexiconData> lexicon; // maps word (string) to [start block, end block]
-    std::vector<uint32_t> blockLocations; // will keep track how many bytes block i is from the begining 
     uint32_t startBlock = 0;
     uint32_t currBlock = 0;
 
-    Block bufferBlock = Block(&index, &metaData);
+    Block bufferBlock = Block(&index, &metaData, &blockLocation);
 
     uint32_t prevTermID = 0;
     uint32_t termCount = 0;
@@ -156,7 +178,9 @@ int main() {
             startBlock = currBlock;
             termCount = 0;
         }
-        if (bufferBlock.addToChunk(docid, (uint8_t)freq)){
+        if (bufferBlock.addToChunk(docid, (uint8_t)freq)){ // when printing out the final block check this to see if u had just printed out
+            // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
+            // the final block twice 
             currBlock++;
         }
         
