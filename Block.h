@@ -15,6 +15,7 @@ class Chunk{
 public:
     uint32_t docIDList[CHUNK_LIST_SIZE];
     uint8_t freqList[CHUNK_LIST_SIZE];
+    vector<uint8_t> compressedDocIDList;
     // might be nice to have. we might do the compression in a function outside of the classs
     // Then again we could also do it in the class but idk
     Chunk();
@@ -27,7 +28,6 @@ class Block {
     uint32_t currIndexSize;
     // the fields are the meta data
     uint32_t lastDocID[NUM_CHUNKS];
-
     Chunk chunks[NUM_CHUNKS];
     uint8_t currChunkInd; // keep track of which chunk we at
     uint8_t currListInd; // which ind we are in the list of each chunk

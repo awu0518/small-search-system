@@ -1,4 +1,4 @@
-// assume 64kb blocks, lets say 10 chunks per block, chunks will contain 128 entries of docids/freq
+// assume 6400b blocks, lets say 10 chunks per block, chunks will contain 128 entries of docids/freq
 // max 32bits per docid, 1byte per freq
 // each entry in the mergedPreIndex looks like (packedNum, freq) = (termid + docid, freq)
 #include <iostream>
