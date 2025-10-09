@@ -35,7 +35,7 @@ uint32_t decodeNum(std::ifstream& input);
 void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
 double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen);
-uint32_t findNextDocID(const InvertedList& currList, uint32_t target);
+uint32_t findNextDocID(InvertedList& currList, uint32_t target);
 void conjunctiveDAAT();
 void disjunctiveDAAT();
 
@@ -122,7 +122,7 @@ double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen) {
     return std::log2((N - ft + 0.5) / (ft + 0.5)) * ((K1 + 1) * fdt) / (K + fdt);
 }
 
-uint32_t findNextDocID(const InvertedList& currList, uint32_t target) {
+uint32_t findNextDocID(InvertedList& currList, uint32_t target) {
     uint32_t currChunk = currList.currChunk;
     while (target > currList.lastDocIds[currChunk] && currChunk < currList.lastDocIds.size()) { currChunk++; }
 
