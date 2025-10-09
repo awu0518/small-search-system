@@ -10,132 +10,25 @@
 #include <algorithm>
 #include <regex>
 #include <filesystem>
+#include "Block.h"
 using namespace std; // fuck u alex
 
 uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void arrDifferences(uint32_t* arr, int start, int end);
-uint32_t encodeNum(std::ofstream* output, uint32_t num);
-void printArr(void* arr, int size);
+uint16_t encodeNum(std::ofstream* output, uint32_t num);
+void printArr(uint32_t* arr, int size);
 void readVector(std::vector<std::string>& words);
 void byteWrite(std::ofstream* output, uint32_t num, int size);
-const int CHUNK_LIST_SIZE = 128;
-const int NUM_CHUNKS = 10;
-class Chunk{
-public:
 
-    uint32_t docIDList[CHUNK_LIST_SIZE];
-    uint8_t freqList[CHUNK_LIST_SIZE];
-    // might be nice to have. we might do the compression in a function outside of the classs
-    // Then again we could also do it in the class but idk
-    Chunk(){
-        reset();
-    }
-    void reset(){
-        memset(docIDList, 0, sizeof(docIDList));
-        memset(freqList, 0, sizeof(freqList));
-    }
-};
-
-class Block {
-    public:
-    // the fields are the meta data
-    uint32_t lastDocID[NUM_CHUNKS];
-
-    Chunk chunks[NUM_CHUNKS];
-    uint8_t currChunkInd; // keep track of which chunk we at
-    uint8_t currListInd; // which ind we are in the list of each chunk
-    std::ofstream* indexFile;
-    std::ofstream* metaFile;
-    std::ofstream* blockLocation;
-
-    Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* blockLocation){
-        this->indexFile = indexFile;
-        this->metaFile = metaFile;
-        this->blockLocation = blockLocation;
-        reset();
-    }
-        
-    uint32_t addToChunk(uint32_t newID, uint8_t newFreq){
-        chunks[currChunkInd].docIDList[currListInd] = newID; // append to docid list
-        chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
-        currListInd++;
-        if (currListInd == CHUNK_LIST_SIZE){
-            lastDocID[currChunkInd] = newID; // record the last docid in chunk
-            arrDifferences(chunks[currChunkInd].docIDList, 0, 128); // the substraction thing on the docids
-            currChunkInd++;
-            currListInd = 0;
-        }
-        if (currChunkInd == 10){ // need some way to update metadata for the flush when incomplete block
-            flush(); // putting this here before changing currChunkInd = 0
-            // the idea is that I can call flush() in main() after reading ends from index file
-            // to flush out an incomplete block
-            reset();
-            return true;
-        }
-        return false;
-    }
-    Chunk* currChunk(){
-        return &(chunks[currChunkInd]); 
-    }
-    void flush(){// to flush contents into a file
-        static uint32_t currBlock = 0;
-    // to flush contents into a file. This code will assume the block it is 
-    // flushing is not the final block (not an incomplete one)
-        for (int i=0;i<currChunkInd;i++){
-            for (int j=0;j < CHUNK_LIST_SIZE; j++){
-                encodeNum(indexFile, chunks[i].docIDList[j]);
-            }
-            for (int j=0;j < CHUNK_LIST_SIZE; j++){
-                indexFile->write(reinterpret_cast<const char*>(&chunks[i].freqList[j]), sizeof(uint8_t));
-            }
-        }
-
-        *blockLocation << currBlock++ << " " << indexFile->tellp() << " ";
-
-        flushMetaData();
-    } 
-    // 
-    void flushMetaData(){
-        for (int i=0;i<NUM_CHUNKS;i++){
-            byteWrite(metaFile, lastDocID[i], sizeof(uint32_t));
-        }
-        *metaFile << std::endl;
-    }
-    void flushLastBlock(){
-        // flush out all the complete chunks before the one we are currently on
-        // The one we are curr on is the incomplete one
-        for (int i=0;i<currChunkInd;i++){
-            for (uint32_t docid: lastDocID){
-                byteWrite(metaFile, docid, sizeof(uint32_t));
-            }
-        }
-        // currListInd should tell us if there are leftovers in the curr chunk
-        // and where it is
-        for (int i=0;i<currListInd;i++){
-            if (chunks[currChunkInd].freqList[i+1] != 0){
-                byteWrite(metaFile, chunks[currChunkInd].docIDList[i], sizeof(uint32_t));
-            }
-        }
-        byteWrite(metaFile, currListInd == 0 ? currChunkInd-1: currChunkInd, sizeof(uint32_t));
-
-
-    }
-    void reset(){
-        currChunkInd = 0;
-        currListInd = 0;
-        memset(lastDocID, 0, sizeof(lastDocID));
-        for (int i=0;i<NUM_CHUNKS;i++){
-            chunks[i].reset();
-        }
-    }
-};
 
 struct lexiconData {
-    uint32_t blockNum;
-    uint8_t chunkNum;
-    uint8_t chunkPos;
+    uint32_t startBlockNum;
+    uint8_t startChunkNum;
+    uint8_t startChunkPos;
     uint32_t listLen;
+    uint32_t startByte;
+    uint32_t endByte;
 };
 
 int main() {
@@ -145,7 +38,8 @@ int main() {
     std::ofstream metaData("metaData.txt");
     std::ofstream blockLocation("blockLocation");
 
-    if (!index || !metaData || !blockLocation) { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
+    if (!index || !metaData || !blockLocation) 
+    { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
 
     int count = 0;
     uint32_t freq;
@@ -153,50 +47,74 @@ int main() {
 
     std::vector<std::string> termToWord;
     readVector(termToWord); 
-
-    std::unordered_map<std::string, lexiconData> lexicon; // maps word (string) to [start block, end block]
-    uint32_t startBlock = 0;
+    std::unordered_map<std::string, lexiconData> lexicon; 
     uint32_t currBlock = 0;
 
     Block bufferBlock = Block(&index, &metaData, &blockLocation);
 
     uint32_t prevTermID = 0;
     uint32_t termCount = 0;
-    while (count < 150){ 
+    uint32_t termid;
+    uint32_t docid;
+    while (true){ 
+        
         preind >> packedNum; // get the packed num
         preind >> freq; // next is the freq
-
-        uint32_t termid;
-        uint32_t docid;
+        
         termid = unpackTermID(packedNum);
         docid = unpackDocID(packedNum);
         
-        cout << termid << " " << docid << " " << freq << endl;
-        
-        if (prevTermID != termid){
-            lexicon[termToWord[prevTermID]] = lexiconData{startBlock, bufferBlock.currChunkInd, bufferBlock.currListInd, termCount};
-            startBlock = currBlock;
-            termCount = 0;
+        cout << termid << " " << docid << " " << freq  << " " << count << endl;
+
+        if (count == 0){
+            lexicon[termToWord[termid]] = lexiconData{0, 0, 0, 0, 0, 0}; // set up first 
+            // entry into the lexicon
         }
-        if (bufferBlock.addToChunk(docid, (uint8_t)freq)){ // when printing out the final block check this to see if u had just printed out
+        if (prevTermID != termid){
+            lexicon[termToWord[prevTermID]].listLen = termCount; // now we know how many entries the term had
+            lexicon[termToWord[termid]] = lexiconData{currBlock, 
+                                                    bufferBlock.currChunkInd, 
+                                                    bufferBlock.currListInd, 0, 0, 0};
+            termCount = 0;
+            bufferBlock.subtractionCompress(
+                lexicon[termToWord[prevTermID]].startChunkPos, 
+                lexicon[termToWord[prevTermID]].startChunkNum
+            );
+        }
+        bool block_flushed = bufferBlock.addToChunk(docid, (uint8_t)freq);
+        if (block_flushed){ 
+            // when printing out the final block check this to see if u had just printed out
             // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
             // the final block twice 
             currBlock++;
         }
-        
+        if (!block_flushed && !index){
+            break;
+        }
+        else if (!index){
+
+        }
         prevTermID = termid;
         termCount++;
         count++;
     }
-    cout << bufferBlock.currListInd << endl;
+    cout << "Stuff ended" << endl;
+    cout << "curr list ind " << (int)bufferBlock.currListInd << endl;
+    cout << "curr chunk ind " << (int)bufferBlock.currChunkInd << endl;
+    cout << "curr block num " << currBlock << endl;
+    // bufferBlock.subtractionCompress(0, 0);
+    printArr(bufferBlock.chunks[0].docIDList, 128);
+    printArr(bufferBlock.chunks[1].docIDList, 128);
+    printArr(bufferBlock.chunks[2].docIDList, 128);
     printArr(bufferBlock.currChunk()->docIDList, 128);
     // printArr(bufferBlock.chunks[0].freqList, 128);
-    for (int i=0;i<128;i++){
-        cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
-    }
-    cout << endl;
-    bufferBlock.currChunkInd++;
-    bufferBlock.flush();
+    // for (int i=0;i<128;i++){
+    //     cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
+    // }
+    // cout << endl;
+    // bufferBlock.currChunkInd++;
+    // cout << "flush "<< endl;
+    // bufferBlock.flushLastBlock();
     
 }
 
@@ -217,44 +135,13 @@ uint32_t unpackDocID(uint64_t pack) {
     return uint32_t(pack & 0xffffffffu);
 }
 
-void printArr(void* arr, int size){
+void printArr(uint32_t* arr, int size){
     for (int i=0;i<size;i++){
-        cout << ((int*)arr)[i] << " ";
+
+        cout << arr[i] << " ";
     }
     cout << endl;
 
-}
-
-void arrDifferences(uint32_t* arr, int start, int end){
-    for (int i=end; i==start; i--){
-        arr[i] = arr[i] - arr[i-1];
-    }
-}
-
-void byteWrite(std::ofstream* output, uint32_t num, int size){
-    output->write(reinterpret_cast<const char*>(&num), size);
-}
-
-/*
-Writes a number compressed using varbyte as bytes into an output stream
-
-If a number is greater than 127, we write the upper bytes with a 1 in the first bit to indicate
-the number continues into the next byte, and write the remaining 7 bits of that first byte.
-
-At the end its guaranteed to fit within a 7 bit number
-*/
-uint32_t encodeNum(std::ofstream* output, uint32_t num) {
-    uint32_t size = 1;
-    while (num >= 128) {
-        uint8_t currByte = 128 + (num & 127);
-        output->write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));
-        num = num >> 7;
-        size++;
-    }
-
-    uint8_t last = static_cast<uint8_t>(num);
-    output->write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
-    return size;
 }
 
 void readVector(std::vector<std::string>& words) {
