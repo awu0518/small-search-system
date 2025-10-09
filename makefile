@@ -14,8 +14,8 @@ readCollection.exe: readCollection.cpp
 merge.exe: mergeTempFiles.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
-index.exe: index.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+index.exe: index.cpp Block.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@ 
 
 # Clean rule
 clean:
