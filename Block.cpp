@@ -20,6 +20,7 @@ Chunk::Chunk(){
 void Chunk::reset(){
     memset(docIDList, 0, sizeof(docIDList));
     memset(freqList, 0, sizeof(freqList));
+    compressedDocIDList.clear();
 }
 
 
