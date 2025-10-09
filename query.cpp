@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <cmath>
 
-const int K1 = 1.2;
+const double K1 = 1.2;
 const double B = 0.75;
 const int N = 8841823;
 const double DAVG = 55.9158;
