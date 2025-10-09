@@ -16,17 +16,26 @@ struct Chunk {
     uint8_t freq[128];
 }; 
 
+struct UncompressedChunk {
+    uint32_t docIds[128];
+    uint8_t freq[128];
+};
+
 struct InvertedList {
     std::vector<uint32_t> lastDocIds;
-    std::vector<uint32_t> bytesToChunk;
+    std::vector<uint32_t> docIdBytes;
+    std::vector<Chunk*> compressedChunks;
     uint32_t numDocs;
     uint8_t startPositionFirst;
+    uint32_t currChunk = 0;
+    UncompressedChunk* currUncompressedChunk = nullptr;
 };
 
 uint32_t decodeNum(std::ifstream& input);
 void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
 double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen);
+uint32_t findNextDocID(InvertedList& currList, uint32_t target);
 void conjunctiveDAAT();
 void disjunctiveDAAT();
 
@@ -87,6 +96,8 @@ void readPageTable(std::unordered_map<uint32_t, uint16_t>& pageTable) {
 /*
 Splits and normalizes the string into tokens of all lowercase words without
 nonalphanumeric characters except those within words
+
+TODO: remove duplicate words
 */
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
     tokens.clear();
@@ -109,6 +120,25 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
 double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen) {
     double K = K1 * ((1-B) + B * (docLen) / DAVG);
     return std::log2((N - ft + 0.5) / (ft + 0.5)) * ((K1 + 1) * fdt) / (K + fdt);
+}
+
+uint32_t findNextDocID(InvertedList& currList, uint32_t target) {
+    uint32_t currChunk = currList.currChunk;
+    while (target > currList.lastDocIds[currChunk] && currChunk < currList.lastDocIds.size()) { currChunk++; }
+
+    if (currChunk == currList.lastDocIds.size()) { return N; }
+
+    if (currChunk != currList.currChunk) { 
+        // compress current uncompressedChunk
+
+        // uncompress new chunk
+    }
+
+    for (int i = 0; i < 128; i++) { 
+        if (currList.currUncompressedChunk->docIds[i] >= target) { 
+            return currList.currUncompressedChunk->docIds[i]; 
+        }
+    }
 }
 
 void conjunctiveDAAT() {
