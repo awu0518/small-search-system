@@ -10,15 +10,16 @@ const double K1 = 1.2;
 const double B = 0.75;
 const int N = 8841823;
 const double DAVG = 55.9158;
+const uint8_t CHUNK_SIZE = 128;
 
 struct Chunk {
     std::vector<uint8_t> compressedDocIds;
-    uint8_t freq[128];
+    uint8_t freq[CHUNK_SIZE];
 }; 
 
 struct UncompressedChunk {
-    uint32_t docIds[128];
-    uint8_t freq[128];
+    uint32_t docIds[CHUNK_SIZE];
+    uint8_t freq[CHUNK_SIZE];
 };
 
 struct InvertedList {
@@ -29,9 +30,10 @@ struct InvertedList {
     uint8_t startPositionFirst;
     uint32_t currChunk = 0;
     UncompressedChunk* currUncompressedChunk = nullptr;
+    uint8_t lastChunkLen = 0;
 };
 
-uint32_t decodeNum(std::ifstream& input);
+uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos);
 void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
 double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen);
@@ -60,18 +62,14 @@ int main() {
     return 0;
 }
 
-uint32_t decodeNum(std::ifstream& input) {
+uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos) {
     uint32_t num = 0;
     uint8_t shift = 0;
-    
-    char c;
-    input.get(c);
     uint8_t currByte;
 
-    while ((currByte = static_cast<uint8_t>(c)) >= 128) {
+    while ((currByte = static_cast<uint8_t>(bytes[currPos++])) >= 128) {
         num = num + ((currByte & 127) << shift);
         shift += 7;
-        input.get(c);
     }
 
     return num + (currByte << shift);
@@ -129,12 +127,17 @@ uint32_t findNextDocID(InvertedList& currList, uint32_t target) {
     if (currChunk == currList.lastDocIds.size()) { return N; }
 
     if (currChunk != currList.currChunk) { 
-        // compress current uncompressedChunk
+        delete currList.currUncompressedChunk;
 
-        // uncompress new chunk
+        currList.currUncompressedChunk = new UncompressedChunk{};
+        size_t index = 0;
+        for (int i = 0; i < CHUNK_SIZE; i++) {
+            currList.currUncompressedChunk->docIds[i] = decodeNum(currList.compressedChunks[currChunk]->compressedDocIds, index);
+            currList.currUncompressedChunk->freq[i] = currList.compressedChunks[currChunk]->freq[i];
+        }
     }
 
-    for (int i = 0; i < 128; i++) { 
+    for (int i = 0; i < CHUNK_SIZE; i++) { 
         if (currList.currUncompressedChunk->docIds[i] >= target) { 
             return currList.currUncompressedChunk->docIds[i]; 
         }
