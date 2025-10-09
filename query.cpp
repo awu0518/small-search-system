@@ -1,40 +1,52 @@
 #include <iostream>
 #include <fstream>
 #include <cstdint>
+#include <vector>
+#include <limits>
+#include <unordered_map>
+#include <cmath>
 
-// FOR DEBUGGING
-#include <sstream>
-#include <iomanip>
-#include <bitset>
+const double K1 = 1.2;
+const double B = 0.75;
+const int N = 8841823;
+const double DAVG = 55.9158;
 
-void encodeNum(std::ofstream& output, uint32_t num);
+struct Chunk {
+    std::vector<uint8_t> compressedDocIds;
+    uint8_t freq[128];
+}; 
+
+struct InvertedList {
+    std::vector<uint32_t> lastDocIds;
+    std::vector<uint32_t> bytesToChunk;
+    uint32_t numDocs;
+    uint8_t startPositionFirst;
+};
+
 uint32_t decodeNum(std::ifstream& input);
+void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
+void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
+double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen);
+void conjunctiveDAAT();
+void disjunctiveDAAT();
 
 int main() {
+    std::unordered_map<uint32_t, uint16_t> pageTable;
+    readPageTable(pageTable);
 
-    uint32_t test1 = 20;
-    uint32_t test2 = 150;
-    uint32_t test3 = 52345;
-    uint32_t test4 = 3000000;
+    std::string query; bool mode; std::vector<std::string> tokens;
+    while (true) {
+        std::cout << "Enter query: ";
+        std::getline(std::cin, query);
+        std::cout << "Enter 0 for conjuctive and 1 for disjunctive: ";
+        std::cin >> mode;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        
+        tokenizeString(query, tokens);
 
-    std::ofstream output("testVarByte", std::ios::binary);
-    if (!output) { std::cerr << "could not open testVarByte for writing"; exit(1); }
-
-    encodeNum(output, test1);
-    encodeNum(output, test2);
-    encodeNum(output, test3);
-    encodeNum(output, test4);
-
-    output.close();
-
-    std::ifstream input("testVarByte", std::ios::binary);
-    if (!input) { std::cerr << "could not open testVarByte for reading"; exit(1); }
-
-    std::cout << decodeNum(input) << std::endl;
-    std::cout << decodeNum(input) << std::endl;
-    std::cout << decodeNum(input) << std::endl;
-    std::cout << decodeNum(input) << std::endl;
-    input.close();
+        if (!mode) { conjunctiveDAAT(); }
+        else { disjunctiveDAAT(); }
+    }
 
     return 0;
 }
@@ -56,25 +68,53 @@ uint32_t decodeNum(std::ifstream& input) {
     return num + (currByte << shift);
 }
 
-void encodeNum(std::ofstream& output, uint32_t num) {
-    // FOR DEBUGGING
-    std::ostringstream debug;
-    debug << std::hex << std::setfill('0');
+void readPageTable(std::unordered_map<uint32_t, uint16_t>& pageTable) {
+    std::ifstream pageTableFile("tempFiles/pageTable");
+    if (!pageTableFile) { std::cerr << "Unable to open page table file\n"; exit(1); }
 
-    while (num >= 128) {
-        uint8_t currByte = 128 + (num & 127);
-        output.write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));
-
-        // FOR DEBUGGING
-        debug << std::bitset<8>(currByte) << ' ';
-
-        num = num >> 7;
+    uint32_t tempDocId; uint16_t tempDocSize; uint32_t totalLength = 0;
+    while (pageTableFile >> tempDocId >> tempDocSize) {
+        totalLength += tempDocSize;
+        pageTable.insert({tempDocId, tempDocSize});
     }
 
-    uint8_t last = static_cast<uint8_t>(num);
-    output.write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
+    std::cout << "Number of documents: " << pageTable.size() << std::endl;
+    std::cout << "Average document length: " << (double)totalLength / pageTable.size() << std::endl;
 
-    // FOR DEBUGGING
-    debug << std::bitset<8>(last);
-    std::cout << debug.str() << std::endl;
+    pageTableFile.close();
+}
+
+/*
+Splits and normalizes the string into tokens of all lowercase words without
+nonalphanumeric characters except those within words
+*/
+void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
+    tokens.clear();
+    std::string tempString;
+    
+    for (char ch : line) {
+        if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
+        else { 
+            if (tempString.size() == 0) { continue; }
+            tokens.push_back(tempString);
+            tempString.clear();
+        }
+    }
+    if (!tempString.empty()){
+        tokens.push_back(tempString);
+        tempString.clear();
+    }
+}
+
+double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen) {
+    double K = K1 * ((1-B) + B * (docLen) / DAVG);
+    return std::log2((N - ft + 0.5) / (ft + 0.5)) * ((K1 + 1) * fdt) / (K + fdt);
+}
+
+void conjunctiveDAAT() {
+    std::cout << "Doing conjunctive DAAT" << std::endl;
+}
+
+void disjunctiveDAAT() {
+    std::cout << "Doing disjunctive DAAT" << std::endl;
 }
