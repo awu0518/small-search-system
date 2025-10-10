@@ -24,8 +24,8 @@ void byteWrite(std::ofstream* output, uint32_t num, int size);
 
 struct lexiconData {
     uint32_t startBlockNum;
-    uint8_t startChunkNum;
-    uint8_t startChunkPos;
+    uint32_t startChunkNum;
+    uint32_t startChunkPos;
     uint32_t listLen;
     uint32_t startByte;
     uint32_t endByte;
@@ -36,9 +36,9 @@ int main() {
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
     std::ofstream index("index.txt");
     std::ofstream metaData("metaData.txt");
-    std::ofstream blockLocation("blockLocation");
-
-    if (!index || !metaData || !blockLocation) 
+    std::ofstream blockLocation("blockLocation.txt");
+    std::ofstream lexiconFile("lexicon.txt");
+    if (!index || !metaData || !blockLocation || !lexiconFile) 
     { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
 
     int count = 0;
@@ -56,6 +56,7 @@ int main() {
     uint32_t termCount = 0;
     uint32_t termid;
     uint32_t docid;
+    uint32_t currIndexSize = 0;
     while (true){ 
         
         preind >> packedNum; // get the packed num
@@ -64,49 +65,63 @@ int main() {
         termid = unpackTermID(packedNum);
         docid = unpackDocID(packedNum);
         
-        cout << termid << " " << docid << " " << freq  << " " << count << endl;
+        if (termid != 1244 && count == 0 ){
+            continue;
+        }
 
+        // cout << termid << " " << docid << " " << freq  << " " << count << endl;
+        if (count > 500){
+            break;
+        }
         if (count == 0){
             lexicon[termToWord[termid]] = lexiconData{0, 0, 0, 0, 0, 0}; // set up first 
             // entry into the lexicon
         }
-        if (prevTermID != termid){
-            lexicon[termToWord[prevTermID]].listLen = termCount; // now we know how many entries the term had
-            lexicon[termToWord[termid]] = lexiconData{currBlock, 
-                                                    bufferBlock.currChunkInd, 
-                                                    bufferBlock.currListInd, 0, 0, 0};
-            termCount = 0;
-            bufferBlock.subtractionCompress(
-                lexicon[termToWord[prevTermID]].startChunkPos, 
-                lexicon[termToWord[prevTermID]].startChunkNum
-            );
-        }
-        bool block_flushed = bufferBlock.addToChunk(docid, (uint8_t)freq);
-        if (block_flushed){ 
+        
+
+        if (bufferBlock.currChunkInd == 10){ 
             // when printing out the final block check this to see if u had just printed out
             // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
             // the final block twice 
             currBlock++;
-        }
-        if (!block_flushed && !index){
-            break;
-        }
-        else if (!index){
+            bufferBlock.subtractionCompress();
+            
+            currIndexSize += bufferBlock.flush();
+            bufferBlock.flushMetaData();
+            blockLocation << currBlock << " " << index.tellp() << " "; 
+            bufferBlock.reset();
 
+        }
+        else if (prevTermID != termid){
+            
+            bufferBlock.subtractionCompress();
+            currIndexSize += bufferBlock.flush();
+            lexiconData lex = lexicon[termToWord[prevTermID]];
+            lexicon[termToWord[termid]] = lexiconData{currBlock, 
+                                                    bufferBlock.currChunkInd, 
+                                                    bufferBlock.currListInd, currIndexSize+1, 0, 0};
+            
+            lexicon[termToWord[prevTermID]].listLen = termCount; // now we know how many entries the term had
+            lexicon[termToWord[prevTermID]].endByte = currIndexSize;
+            
+            termCount = 0;
+            currIndexSize = 0;
+        }
+        bufferBlock.addToChunk(docid, (uint8_t)freq);
+        if (!index){
+            // bufferBlock.flushMetaData(); 
+            exit(1);
         }
         prevTermID = termid;
         termCount++;
         count++;
+
     }
-    cout << "Stuff ended" << endl;
-    cout << "curr list ind " << (int)bufferBlock.currListInd << endl;
-    cout << "curr chunk ind " << (int)bufferBlock.currChunkInd << endl;
-    cout << "curr block num " << currBlock << endl;
-    // bufferBlock.subtractionCompress(0, 0);
-    printArr(bufferBlock.chunks[0].docIDList, 128);
-    printArr(bufferBlock.chunks[1].docIDList, 128);
-    printArr(bufferBlock.chunks[2].docIDList, 128);
-    printArr(bufferBlock.currChunk()->docIDList, 128);
+
+    writeLex(lexiconFile, lexicon);
+
+    
+
     // printArr(bufferBlock.chunks[0].freqList, 128);
     // for (int i=0;i<128;i++){
     //     cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
@@ -153,16 +168,10 @@ void readVector(std::vector<std::string>& words) {
     termToWord.close();
 }
 
-/*
-while loading stuff form file:
-    if termid is the same as the prev:
-        save the docid and freq in lists
-    else when we hit a new termid:
-        make the docid list the differences of numbers 
-        store the docid's in smaller bits
-        calc total bytes sizes of each 
-        flush into the block type datastructure
-
-
-
-*/
+void writeLex(std::ofstream& lexFile, std::unordered_map<std::string, lexiconData> lexicon){
+    for (const auto& [term, data] : lexicon) {
+        lexFile << term << " " << data.startBlockNum << " " << data.startChunkNum 
+        << " " << data.startChunkPos << " " << data.listLen << " " 
+        << data.startByte << " " << data.endByte << " "; 
+    }
+}

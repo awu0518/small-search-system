@@ -31,24 +31,28 @@ void conjunctiveDAAT();
 void disjunctiveDAAT();
 
 int main() {
+    std::ifstream index("index.txt");
     std::unordered_map<uint32_t, uint16_t> pageTable;
     readPageTable(pageTable);
-
-    std::string query; bool mode; std::vector<std::string> tokens;
-    while (true) {
-        std::cout << "Enter query: ";
-        std::getline(std::cin, query);
-        std::cout << "Enter 0 for conjuctive and 1 for disjunctive: ";
-        std::cin >> mode;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-        tokenizeString(query, tokens);
-
-        if (!mode) { conjunctiveDAAT(); }
-        else { disjunctiveDAAT(); }
+    for (int i=0;i<128;i++){
+        std::cout << decodeNum(index) << std::endl;
     }
+    std::string query; bool mode; std::vector<std::string> tokens;
+    // while (true) {
+    //     std::cout << "Enter query: ";
+    //     std::getline(std::cin, query);
+    //     std::cout << "Enter 0 for conjuctive and 1 for disjunctive: ";
+    //     std::cin >> mode;
+    //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        
+    //     tokenizeString(query, tokens);
 
-    return 0;
+    //     if (!mode) { conjunctiveDAAT(); }
+    //     else { disjunctiveDAAT(); }
+    // }
+
+    // return 0;
+
 }
 
 uint32_t decodeNum(std::ifstream& input) {
