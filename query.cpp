@@ -62,7 +62,7 @@ int main() {
     while (true) {
         std::cout << "Enter query: ";
         std::getline(std::cin, query);
-        std::cout << "Enter 0 for conjuctive and 1 for disjunctive: ";
+        std::cout << "Enter 0 for conjunctive and 1 for disjunctive: ";
         std::cin >> mode;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
@@ -148,7 +148,7 @@ uint32_t findNextDocID(InvertedList* currList, uint32_t target) {
 
     if (currChunk == currList->lastDocIds.size()) { return N; }
 
-    if (currChunk != currList->currChunk) { 
+    if (currChunk != currList->currChunk || !currList->currUncompressedChunk) { 
         delete currList->currUncompressedChunk;
 
         currList->currUncompressedChunk = new UncompressedChunk{};
@@ -208,6 +208,8 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
                 }
             }
         }
+
+        currDocId++;
     }
 
     std::vector<std::pair<double, uint32_t>> topSearches;
