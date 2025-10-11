@@ -3,7 +3,7 @@ CXX = g++
 CXXFLAGS = -Wall -Wextra -pedantic -g
 
 # Executable names
-TARGETS = readCollection.exe merge.exe index.exe 
+TARGETS = readCollection.exe merge.exe index.exe query.exe
 
 # Default rule
 all: $(TARGETS)
@@ -16,6 +16,10 @@ merge.exe: mergeTempFiles.cpp
 
 index.exe: index.cpp Block.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@ 
+
+query.exe: query.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
 
 # Clean rule
 clean:
