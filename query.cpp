@@ -46,12 +46,13 @@ struct Compare {
 uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos);
 void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
-double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen);
+double bm25(InvertedList* currList, uint16_t docLen);
 uint32_t findNextDocID(InvertedList* currList, uint32_t target);
 InvertedList* openInvertedList(const std::string& term);
 void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists, 
     const std::unordered_map<uint32_t, uint16_t>& pageTable);
-void disjunctiveDAAT();
+void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists, 
+    const std::unordered_map<uint32_t, uint16_t>& pageTable);
 
 int main() {
     std::ifstream index("index.txt");
@@ -77,7 +78,7 @@ int main() {
         std::sort(lists.begin(), lists.end());
 
         if (!mode) { conjunctiveDAAT(lists, pageTable); }
-        else { disjunctiveDAAT(); }
+        else { disjunctiveDAAT(lists, pageTable); }
     }
 
     // return 0;
@@ -86,7 +87,7 @@ int main() {
 
 uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos) {
     uint32_t num = 0;
-    uint8_t shift = 0;
+    uint32_t shift = 0;
     uint8_t currByte;
 
     while ((currByte = static_cast<uint8_t>(bytes[currPos++])) >= 128) {
@@ -127,17 +128,24 @@ void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
         if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
         else { 
             if (tempString.size() == 0) { continue; }
-            tokens.push_back(tempString);
+
+            tokens.push_back(tempString);        
             tempString.clear();
         }
     }
+
     if (!tempString.empty()){
         tokens.push_back(tempString);
         tempString.clear();
     }
+
+    std::sort(tokens.begin(), tokens.end());
+    tokens.erase(std::unique(tokens.begin(), tokens.end()), tokens.end());
 }
 
-double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen) {
+double bm25(InvertedList* currList, uint16_t docLen) {
+    uint32_t ft = currList->numDocs;
+    uint8_t fdt = currList->currUncompressedChunk->freq[currList->currUncompressedChunk->currPos];
     double K = K1 * ((1-B) + B * (docLen) / DAVG);
     return std::log2((N - ft + 0.5) / (ft + 0.5)) * ((K1 + 1) * fdt) / (K + fdt);
 }
@@ -145,24 +153,28 @@ double bm25(uint32_t ft, uint8_t fdt, uint16_t docLen) {
 uint32_t findNextDocID(InvertedList* currList, uint32_t target) {
     uint32_t currChunk = currList->currChunk;
     while (target > currList->lastDocIds[currChunk] && currChunk < currList->lastDocIds.size()) { currChunk++; }
-
-    if (currChunk == currList->lastDocIds.size()) { return N; }
+    if (currChunk >= currList->lastDocIds.size()) { return N; }
 
     if (currChunk != currList->currChunk || !currList->currUncompressedChunk) { 
         delete currList->currUncompressedChunk;
 
         currList->currUncompressedChunk = new UncompressedChunk{};
+        currList->currChunk = currChunk;
+        Chunk* newChunk = currList->compressedChunks[currChunk];
+        int chunkLen = (currChunk + 1 == currList->lastDocIds.size()) ? currList->lastChunkLen : CHUNK_SIZE;
+
         size_t index = 0;
-        for (int i = 0; i < CHUNK_SIZE; i++) {
-            currList->currUncompressedChunk->docIds[i] = decodeNum(currList->compressedChunks[currChunk]->compressedDocIds, index);
-            currList->currUncompressedChunk->freq[i] = currList->compressedChunks[currChunk]->freq[i];
+        for (int i = 0; i < chunkLen; i++) {
+            currList->currUncompressedChunk->docIds[i] = decodeNum(newChunk->compressedDocIds, index);
+            currList->currUncompressedChunk->freq[i] = newChunk->freq[i];
         }
-        for (int i = 1; i < CHUNK_SIZE; i++) {
+        for (int i = 1; i < chunkLen; i++) {
             currList->currUncompressedChunk->docIds[i] += currList->currUncompressedChunk->docIds[i - 1];
         }
     }
 
-    for (int i = 0; i < CHUNK_SIZE; i++) { 
+    int chunkLen = (currChunk + 1 == currList->lastDocIds.size()) ? currList->lastChunkLen : CHUNK_SIZE;
+    for (int i = 0; i < chunkLen; i++) { 
         if (currList->currUncompressedChunk->docIds[i] >= target) { 
             currList->currUncompressedChunk->currPos = i;
             return currList->currUncompressedChunk->docIds[i]; 
@@ -182,9 +194,7 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     std::priority_queue<std::pair<double, uint32_t>, std::vector<std::pair<double, uint32_t>>, Compare> heap;
 
     uint32_t currDocId = 0;
-    for (uint32_t i = 0; i < baseList->numDocs; i++) {
-        currDocId = findNextDocID(baseList, currDocId);
-
+    while ((currDocId = findNextDocID(baseList, currDocId)) != N) {
         size_t index = 1;
         for (; index < lists.size(); index++) {
             if (findNextDocID(lists[index].second, currDocId) != currDocId) { break; }
@@ -194,18 +204,14 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
             double impactScore = 0;
             for (size_t j = 0; j < lists.size(); j++) {
                 InvertedList* currList = lists[j].second;
-                impactScore += bm25(currList->numDocs, 
-                    currList->currUncompressedChunk->freq[currList->currUncompressedChunk->currPos], 
-                    pageTable.at(currDocId)); 
+                impactScore += bm25(currList, pageTable.at(currDocId)); 
             }
 
             if (heap.size() != 10) { heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); }
-            else {
-                std::pair<double, uint32_t> minImpact = heap.top();
-                if (minImpact.first < impactScore) {
-                    heap.pop();
-                    heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); 
-                }
+            else if (heap.top().first < impactScore) {
+                heap.pop();
+                heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); 
+                
             }
         }
 
@@ -213,7 +219,7 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     }
 
     std::vector<std::pair<double, uint32_t>> topSearches;
-    for (size_t i = 0; i < heap.size(); i++) {
+    while (!heap.empty()) {
         topSearches.push_back(heap.top());
         heap.pop();
     }
@@ -223,6 +229,65 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     }
 }
 
-void disjunctiveDAAT() {
+void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists, 
+    const std::unordered_map<uint32_t, uint16_t>& pageTable) {
+
     std::cout << "Doing disjunctive DAAT" << std::endl;
+    std::priority_queue<std::pair<double, uint32_t>, std::vector<std::pair<double, uint32_t>>, Compare> heap;
+
+    const size_t numEssential = std::max<size_t>(size_t(lists.size() * 0.3), 1);
+
+    std::vector<std::pair<uint32_t, double>> essentialDocIds;
+    for (int i = 0; i < numEssential; i++) { 
+        InvertedList* currList = lists[i].second;
+        uint32_t currDocId = 0;
+        for (size_t currDocIndex = 0; currDocIndex < currList->numDocs; currDocIndex++) {
+            currDocId = findNextDocID(currList, currDocId);
+            essentialDocIds.push_back(std::pair<uint32_t, double>(currDocId, bm25(currList, pageTable.at(currDocId))));
+            currDocId++;
+        }
+    }
+
+    std::sort(essentialDocIds.begin(), essentialDocIds.end());
+    std::vector<std::pair<uint32_t, double>> essentialDocIdsNoDup;
+
+    for (size_t i = 1; i < essentialDocIds.size(); i++) {
+        if (essentialDocIds[i-1].first == essentialDocIds[i].first) {
+            essentialDocIds[i].second += essentialDocIds[i-1].second;
+        }
+        else {
+            essentialDocIdsNoDup.push_back(essentialDocIds[i-1]);
+        }
+    }
+    essentialDocIdsNoDup.push_back(essentialDocIds[essentialDocIds.size() - 1]);
+
+    for (size_t i = 0; i < essentialDocIdsNoDup.size(); i++) {
+        uint32_t currDocId = essentialDocIdsNoDup[i].first;
+        double currImpact = essentialDocIdsNoDup[i].second;
+
+        for (size_t j = numEssential; j < lists.size(); j++) {
+            if (findNextDocID(lists[j].second, currDocId) == currDocId) {
+                currImpact += bm25(lists[j].second, pageTable.at(currDocId));
+            }
+        }
+
+        if (heap.size() != 10) { heap.push(std::pair<double, uint32_t>(currImpact, currDocId)); }
+        else {
+            std::pair<double, uint32_t> minImpact = heap.top();
+            if (minImpact.first < currImpact) {
+                heap.pop();
+                heap.push(std::pair<double, uint32_t>(currImpact, currDocId)); 
+            }
+        }
+    }
+
+    std::vector<std::pair<double, uint32_t>> topSearches;
+    while (!heap.empty()) {
+        topSearches.push_back(heap.top());
+        heap.pop();
+    }
+    
+    for (size_t i = topSearches.size(); i > 0; i--) {
+        std::cout << "Impact Score: " << topSearches[i-1].first << " DocID: " << topSearches[i-1].second << std::endl;
+    }
 }
