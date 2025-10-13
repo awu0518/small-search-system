@@ -21,7 +21,14 @@ void Chunk::reset(){
     memset(docIDList, 0, sizeof(docIDList));
     memset(freqList, 0, sizeof(freqList));
 }
+void printArr(uint32_t* arr, int size){
+    for (int i=0;i<size;i++){
 
+        cout << arr[i] << " ";
+    }
+    cout << endl;
+
+}
 
 Block::Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* blockLocation){
     this->indexFile = indexFile;
@@ -36,7 +43,7 @@ uint32_t Block::addToChunk(uint32_t newID, uint8_t newFreq){
     chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
     currListInd++;
     if (currListInd == CHUNK_LIST_SIZE){
-        // lastDocID[currChunkInd] = newID; // record the last docid in chunk
+        lastDocIDs[currChunkInd] = newID; // record the last docid in chunk
         currChunkInd++;
         currListInd = 0;
     }
@@ -50,64 +57,59 @@ Chunk* Block::currChunk(){
 // flushing is not the final block (not an incomplete one)
 // flush() will assume either an inverted list is being flushed with the call
 uint32_t Block::flush(int num){
-    uint32_t totalSize = 0;
-    // if (num == 1244){
-    //     cout << "fci: " << (int)flushedChunkInd << " currCi: " << (int)currChunkInd << endl;
-    //     cout << "fLI: " << (int)flushedListInd << " currLi: " << (int)currListInd << endl;
-    // }
-    // if flushedChunkInd == currCHunkInd, then flushedListInd < currListInd
-    // if the 2 inds are in diff chunks then the first flushedInd can loop to 128
-    if (flushedChunkInd == currChunkInd){
-        for (int j=flushedListInd;j < currListInd; j++){ // assume freq[currListInd] = 0
-            totalSize += encodeNum(indexFile, chunks[flushedChunkInd].docIDList[j]);
-        }
-        for (int j=flushedListInd;j < currListInd; j++){
-            byteWrite(indexFile, chunks[flushedChunkInd].freqList[j], sizeof(uint8_t));
-            totalSize++;
-        }
-        compressedChunkSizes[currChunkInd] += totalSize;
-    }
-    int end = 0;
-    int start = 0;
-    for (int i=flushedChunkInd+1;i<=currChunkInd;i++){
-        end = i == currChunkInd ? currListInd : 128;
-        start = i == flushedChunkInd ? flushedListInd : 0;
-        for (int j=start;j < end; j++){ // assume freq[currListInd] = 0
-            totalSize += encodeNum(indexFile, chunks[i].docIDList[j]);
-        }
-        for (int j=start;j < end; j++){
-            byteWrite(indexFile, chunks[i].freqList[j], sizeof(uint8_t));
-            totalSize++;
-        }
-        compressedChunkSizes[i] += totalSize;
-    }
+     uint32_t totalBytesFlushed = 0;
 
+    for (int i = flushedChunkInd; i <= currChunkInd; i++) {
+        int start = (i == flushedChunkInd) ? flushedListInd : 0;
+        int end = (i == currChunkInd) ? currListInd : CHUNK_LIST_SIZE;
+
+        uint32_t chunkBytes = 0;
+
+        // Write docIDs
+        for (int j = start; j < end; j++) {
+            chunkBytes += encodeNum(indexFile, chunks[i].docIDList[j]);
+        }
+
+        // Write frequencies
+        for (int j = start; j < end; j++) {
+            byteWrite(indexFile, chunks[i].freqList[j], sizeof(uint8_t));
+            chunkBytes++;
+        }
+
+        compressedChunkSizes[i] += chunkBytes;
+        totalBytesFlushed += chunkBytes;
+    }
 
     flushedChunkInd = currChunkInd;
     flushedListInd = currListInd;
-    return totalSize;
+
+    return totalBytesFlushed;
 
 } 
-uint32_t Block::lastDocID(uint8_t ind){
-    uint32_t sum = 0;
-    for (uint32_t docid: chunks[ind].docIDList){
-        sum+=docid;
-    }
-    return sum;
-}
+
 // flushes out the last docid list and the list for the compressed size of 
 // the docid lists
 // Assumes that you are using this when you are flushing out a whole block
 void Block::flushMetaData(int num){
+    // if (num == 141885){
+
+    //     cout << "start: " << indexFile->tellp() << endl;
+    // }
+    // if (num == 0){
+    //     for (int i=0;i<128;i++){
+    //         cout << (int)chunks[1].docIDList[i] << " ";
+    //     }
+    //     cout << endl;
+    // }
     for (int i=0;i<NUM_CHUNKS;i++){
-        if (num == 141885){
-            cout <<  lastDocID(i) << " ";
+        byteWrite(metaFile, lastDocIDs[i], sizeof(uint32_t));
+        if (num == 1600){
+            cout <<  lastDocIDs[i] << " ";
         }
-        byteWrite(metaFile, lastDocID(i), sizeof(uint32_t));
     }
-    if (num == 141885){cout << endl;}
+    if (num == 1600){cout << endl;}
     for (int i=0;i<NUM_CHUNKS;i++){
-        if (num == 141885){
+        if (num == 1600){
             cout <<  compressedChunkSizes[i] << " ";
         }
         byteWrite(metaFile, compressedChunkSizes[i], sizeof(uint32_t));
@@ -152,6 +154,7 @@ void Block::reset(){
     flushedChunkInd = 0;
     flushedListInd = 0;
     memset(compressedChunkSizes, 0, sizeof(compressedChunkSizes));
+    memset(lastDocIDs, 0, sizeof(lastDocIDs));
     for (int i=0;i<NUM_CHUNKS;i++){
         chunks[i].reset();
     }

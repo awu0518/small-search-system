@@ -16,6 +16,7 @@ using namespace std; // fuck u alex
 
 struct lexiconData {
     uint32_t startBlockNum;
+    uint32_t endBlockNum;
     uint32_t startChunkNum;
     uint32_t startChunkPos;
     uint32_t listLen;
@@ -27,7 +28,7 @@ uint32_t unpackTermID(uint64_t pack);
 uint32_t unpackDocID(uint64_t pack);
 void arrDifferences(uint32_t* arr, int start, int end);
 uint16_t encodeNum(std::ofstream* output, uint32_t num);
-void printArr(uint32_t* arr, int size);
+// void printArr(uint32_t* arr, int size);
 void readVector(std::vector<std::string>& words);
 void byteWrite(std::ofstream* output, uint32_t num, int size);
 void writeLex(std::ofstream& lexFile, std::unordered_map<uint32_t, lexiconData> lexicon);
@@ -36,8 +37,8 @@ void writeLex(std::ofstream& lexFile, std::unordered_map<uint32_t, lexiconData> 
 int main() {
     std::ifstream preind("mergedPreIndex");
     if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
-    std::ofstream index("index.txt");
-    std::ofstream metaData("metaData.txt");
+    std::ofstream index("index.txt", std::ios::binary | std::ios::in | std::ios::out);
+    std::ofstream metaData("metaData.txt",  std::ios::binary | std::ios::in | std::ios::out);
     std::ofstream blockLocation("blockLocation.txt");
     std::ofstream lexiconFile("lexicon.txt");
     if (!index || !metaData || !blockLocation || !lexiconFile) 
@@ -69,28 +70,18 @@ int main() {
         // cout << count << endl;
         
         if (count == 0){
-            lexicon[termid] = lexiconData{0, 0, 0, 0, 0, 0}; // set up first 
+            lexicon[termid] = lexiconData{0, 0, 0, 0, 0, 0, 0}; // set up first 
             // entry into the lexicon
         }
         
+        
 
-        if (bufferBlock.currChunkInd == NUM_CHUNKS){ 
-            // when printing out the final block check this to see if u had just printed out
-            // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
-            // the final block twice 
-            currBlock++;
-            bufferBlock.subtractionCompress();
-            
-            bufferBlock.flush(termid);
-            bufferBlock.flushMetaData(currBlock-1);
-            blockLocation << currBlock << " " << index.tellp() << " "; 
-            bufferBlock.reset();
-
-        }
-        else if (prevTermID != termid){
+        
+        if (prevTermID != termid){
             bufferBlock.subtractionCompress();
             uint32_t size = bufferBlock.flush(prevTermID);
             lexicon[termid] = lexiconData{currBlock, 
+                                            0,
                                             bufferBlock.currChunkInd, 
                                             bufferBlock.currListInd, 
                                             0, static_cast<uint32_t>(index.tellp()), 
@@ -98,26 +89,43 @@ int main() {
             
             lexicon[prevTermID].listLen = termCount; // now we know how many entries the term had
             lexicon[prevTermID].endByte = index.tellp();
-            
+            lexicon[prevTermID].endBlockNum = currBlock;
             termCount = 0;
         }
         bufferBlock.addToChunk(docid, (uint8_t)freq);
-        
+        if (bufferBlock.currChunkInd == NUM_CHUNKS){ 
+            // when printing out the final block check this to see if u had just printed out
+            // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
+            // the final block twice 
+            bufferBlock.subtractionCompress();
+            bufferBlock.flush(termid);
+            bufferBlock.flushMetaData(currBlock);
+            // cout << metaData.tellp() <<endl;
+            blockLocation << currBlock << " " << index.tellp() << " "; 
+            bufferBlock.reset();
+            currBlock++;
+
+
+        }
         prevTermID = termid;
         termCount++;
         count++;
         if (!preind){
+            if (bufferBlock.currListInd != 0){ // check if we are not in an empty chunk
+                bufferBlock.lastDocIDs[bufferBlock.currChunkInd] = bufferBlock.currChunk()->docIDList[bufferBlock.currListInd-1];
+            }
             bufferBlock.subtractionCompress();
             bufferBlock.flush(termid);
             bufferBlock.flushMetaData(currBlock); 
             lexicon[prevTermID].listLen = termCount; // now we know how many entries the term had
             lexicon[prevTermID].endByte = index.tellp();
+            lexicon[prevTermID].endBlockNum = currBlock;
             break;
         }
 
     }
     termid = 1244;
-    cout << termid << endl;
+    cout << endl;
     cout << lexicon[termid].listLen << " " << lexicon[termid].startByte << " " << lexicon[termid].endByte << endl;
     writeLex(lexiconFile, lexicon);
     
@@ -140,14 +148,14 @@ uint32_t unpackDocID(uint64_t pack) {
     return uint32_t(pack & 0xffffffffu);
 }
 
-void printArr(uint32_t* arr, int size){
-    for (int i=0;i<size;i++){
+// void printArr(uint32_t* arr, int size){
+//     for (int i=0;i<size;i++){
 
-        cout << arr[i] << " ";
-    }
-    cout << endl;
+//         cout << arr[i] << " ";
+//     }
+//     cout << endl;
 
-}
+// }
 
 void readVector(std::vector<std::string>& words) {
     std::ifstream termToWord("tempFiles/termToWord");
@@ -160,7 +168,7 @@ void readVector(std::vector<std::string>& words) {
 
 void writeLex(std::ofstream& lexFile, std::unordered_map<uint32_t, lexiconData> lexicon){
     for (const auto& [term, data] : lexicon) {
-        lexFile << term << " " << data.startBlockNum << " " << data.startChunkNum 
+        lexFile << term << " " << data.startBlockNum << " " << data.endBlockNum << " " << data.startChunkNum 
         << " " << data.startChunkPos << " " << data.listLen << " " 
         << data.startByte << " " << data.endByte << " "; 
     }

@@ -28,6 +28,7 @@ class Block {
     uint8_t flushedListInd;
     // the fields are the meta data
     uint32_t compressedChunkSizes[NUM_CHUNKS];
+    uint32_t lastDocIDs[NUM_CHUNKS];
     Chunk chunks[NUM_CHUNKS];
     uint8_t currChunkInd; // keep track of which chunk we at
     uint8_t currListInd; // which ind we are in the list of each chunk

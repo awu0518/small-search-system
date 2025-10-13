@@ -16,6 +16,7 @@ const uint8_t NUM_CHUNKS = 10;
 struct lexiconData {
     uint32_t termid;
     uint32_t startBlockNum;
+    uint32_t endBlockNum;
     uint32_t startChunkNum;
     uint32_t startChunkPos;
     uint32_t listLen;
@@ -58,8 +59,8 @@ uint32_t findNextDocID(InvertedList& currList, uint32_t target);
 void conjunctiveDAAT();
 void disjunctiveDAAT();
 void loadLexicon(std::vector<lexiconData>& lexicons, std::ifstream& lexFile);
-void loadMetaData(int num, std::vector<uint32_t>& lastDocIds, std::vector<uint32_t>& docIdBytes);
-void getInvertedIndex(int num, std::vector<lexiconData>& lexicons, InvertedList& invList);
+void loadMetaData(uint32_t start, uint32_t end, std::vector<uint32_t>& lastDocIds, std::vector<uint32_t>& docIdBytes);
+void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedList& invList);
 
 using namespace std;
 int main() {
@@ -73,20 +74,23 @@ int main() {
     loadLexicon(lexicons, lexFile);
 
 // 1471949
-    int ind = 1245;
+    int ind = 0;
     for (int i=ind;i<ind+1;i++){
-    cout << "len: " <<  lexicons[i].listLen <<  " " << lexicons[i].startByte << " " <<  lexicons[i].endByte << " " << lexicons[i].endByte - lexicons[i].startByte 
+    cout << "len: " <<  lexicons[i].listLen <<  " " << lexicons[i].startBlockNum << " " <<  lexicons[i].endBlockNum << " " << lexicons[i].endByte - lexicons[i].startByte 
     << " " << lexicons[i].startBlockNum << endl;
     }
-    getInvertedIndex(1253, lexicons, invList);
-    for (int i=0;i<invList.lastDocIds.size();i++){
-        cout << invList.lastDocIds[i] << " ";
-    }
-    cout << endl;
-    for (int i=0;i<invList.docIdBytes.size();i++){
-        cout << invList.docIdBytes[i] << " ";
-    }
-    
+    getInvertedIndex(0, lexicons, invList);
+    // cout << "docids" << endl;
+    // for (int i=0;i<invList.lastDocIds.size();i++){
+    //     cout << invList.lastDocIds[i] << " ";
+    // }
+    // cout << "sizes: " << endl;
+    // for (int i=0;i<invList.docIdBytes.size();i++){
+    //     cout << invList.docIdBytes[i] << " ";
+    // }
+    cout << invList.lastDocIds.size() << endl;
+    cout << invList.docIdBytes.size() << endl;
+
 }
 
 uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos) {
@@ -182,7 +186,10 @@ void disjunctiveDAAT() {
 void loadLexicon(std::vector<lexiconData>& lexicons, std::ifstream& lexFile){
     lexiconData tempLex;
     while (lexFile){
-        lexFile >> tempLex.termid >> tempLex.startBlockNum >> tempLex.startChunkNum >> tempLex.startChunkPos >> tempLex.listLen >> tempLex.startByte >> tempLex.endByte;
+        lexFile >> tempLex.termid >> tempLex.startBlockNum >> 
+        tempLex.endBlockNum >> tempLex.startChunkNum >> tempLex.startChunkPos >> 
+        tempLex.listLen >> tempLex.startByte >> tempLex.endByte;
+
         lexicons.push_back(tempLex);
     }
     std::sort(lexicons.begin(), lexicons.end(),
@@ -192,10 +199,10 @@ void loadLexicon(std::vector<lexiconData>& lexicons, std::ifstream& lexFile){
     );
 }
 
-void getInvertedIndex(int num, std::vector<lexiconData>& lexicons, InvertedList& invList){
+void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedList& invList){
     std::ifstream indexFile("index.txt");
-    lexiconData lex = lexicons[num];
-    loadMetaData(num, invList.lastDocIds, invList.docIdBytes);
+    lexiconData lex = lexicons[termid];
+    loadMetaData(lex.startBlockNum, lex.endBlockNum, invList.lastDocIds, invList.docIdBytes);
     indexFile.seekg(lex.startByte, std::ios::beg);
     Chunk* tempChunk = new Chunk();
     int currChunk = 0;
@@ -203,12 +210,14 @@ void getInvertedIndex(int num, std::vector<lexiconData>& lexicons, InvertedList&
     uint32_t totalBytesRead = 0;
     uint32_t maxBytes = lex.endByte - lex.startByte; 
     for (uint32_t i=0;i<invList.docIdBytes[currChunk];i++){
-        indexFile >> tempNum;
+        indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
+
         tempChunk->compressedDocIds.push_back(tempNum);
         totalBytesRead++;
     }
     for (uint8_t i=invList.startPositionFirst;i<CHUNK_SIZE;i++){
-        indexFile >> tempNum;
+        indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
+
         tempChunk->freq[i] = tempNum;
         totalBytesRead++;
     }
@@ -217,12 +226,12 @@ void getInvertedIndex(int num, std::vector<lexiconData>& lexicons, InvertedList&
     while (true){
         tempChunk = new Chunk();
         for (uint32_t i=0;i<invList.docIdBytes[currChunk];i++){
-            indexFile >> tempNum;
+            indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
             tempChunk->compressedDocIds.push_back(tempNum);
             totalBytesRead++;
         }
         for (uint8_t i=0;i<CHUNK_SIZE;i++){
-            indexFile >> tempNum;
+            indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
             tempChunk->freq[i] = tempNum;
             totalBytesRead++;
             if (totalBytesRead == maxBytes || !indexFile){
@@ -239,17 +248,21 @@ void getInvertedIndex(int num, std::vector<lexiconData>& lexicons, InvertedList&
     
 }   
 
-void loadMetaData(int num, std::vector<uint32_t>& lastDocIds, std::vector<uint32_t>& docIdBytes){
-    std::ifstream metaFile("metaData.txt");
-    metaFile.seekg(num*80);
-    uint32_t tempVal = 0;
-    for (uint8_t i=0;i<NUM_CHUNKS;i++){
-        metaFile.read(reinterpret_cast<char*>(&tempVal), sizeof(uint32_t));
-        lastDocIds.push_back(tempVal);
-    }
-    for (uint8_t i=0;i<NUM_CHUNKS;i++){
-        metaFile.read(reinterpret_cast<char*>(&tempVal), sizeof(uint32_t));
-        docIdBytes.push_back(tempVal);
-    }
+void loadMetaData(uint32_t start, uint32_t end,
+                  std::vector<uint32_t>& lastDocIds,
+                  std::vector<uint32_t>& docIdBytes) {
+    std::ifstream metaFile("metaData.txt", std::ios::binary);
+    metaFile.seekg(static_cast<std::streamoff>(start) * 80);
 
+    uint32_t tempVal = 0;
+    for (uint32_t block = start; block <= end; ++block) {
+        for (uint8_t i = 0; i < NUM_CHUNKS; ++i) {
+            metaFile.read(reinterpret_cast<char*>(&tempVal), sizeof(uint32_t));
+            lastDocIds.push_back(tempVal);
+        }
+        for (uint8_t i = 0; i < NUM_CHUNKS; ++i) {
+            metaFile.read(reinterpret_cast<char*>(&tempVal), sizeof(uint32_t));
+            docIdBytes.push_back(tempVal);
+        }
+    }
 }
