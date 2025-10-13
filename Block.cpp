@@ -11,7 +11,7 @@
 using namespace std;
 
 void arrDifferences(uint32_t* arr, int start, int end);
-uint16_t encodeNum(std::ofstream* output, uint32_t num);
+uint32_t encodeNum(std::ofstream* output, uint32_t num);
 void byteWrite(std::ofstream* output, uint32_t num, int size);
 
 Chunk::Chunk(){
@@ -49,21 +49,39 @@ Chunk* Block::currChunk(){
 // This code will assume the block it is 
 // flushing is not the final block (not an incomplete one)
 // flush() will assume either an inverted list is being flushed with the call
-uint32_t Block::flush(){
+uint32_t Block::flush(int num){
     uint32_t totalSize = 0;
-    for (int i=flushedChunkInd;i<=currChunkInd;i++){
+    // if (num == 1244){
+    //     cout << "fci: " << (int)flushedChunkInd << " currCi: " << (int)currChunkInd << endl;
+    //     cout << "fLI: " << (int)flushedListInd << " currLi: " << (int)currListInd << endl;
+    // }
+    // if flushedChunkInd == currCHunkInd, then flushedListInd < currListInd
+    // if the 2 inds are in diff chunks then the first flushedInd can loop to 128
+    if (flushedChunkInd == currChunkInd){
         for (int j=flushedListInd;j < currListInd; j++){ // assume freq[currListInd] = 0
+            totalSize += encodeNum(indexFile, chunks[flushedChunkInd].docIDList[j]);
+        }
+        for (int j=flushedListInd;j < currListInd; j++){
+            byteWrite(indexFile, chunks[flushedChunkInd].freqList[j], sizeof(uint8_t));
+            totalSize++;
+        }
+        compressedChunkSizes[currChunkInd] += totalSize;
+    }
+    int end = 0;
+    int start = 0;
+    for (int i=flushedChunkInd+1;i<=currChunkInd;i++){
+        end = i == currChunkInd ? currListInd : 128;
+        start = i == flushedChunkInd ? flushedListInd : 0;
+        for (int j=start;j < end; j++){ // assume freq[currListInd] = 0
             totalSize += encodeNum(indexFile, chunks[i].docIDList[j]);
         }
-        for (int j=0;j < currListInd; j++){
+        for (int j=start;j < end; j++){
             byteWrite(indexFile, chunks[i].freqList[j], sizeof(uint8_t));
             totalSize++;
         }
         compressedChunkSizes[i] += totalSize;
     }
 
-    // THIS NEEDS TO BE MOVED TO main(). FLUSH NO LONGER ASSUMES WE ARE PRINTING OUT A
-    // WHOLE BLOCK
 
     flushedChunkInd = currChunkInd;
     flushedListInd = currListInd;
@@ -80,14 +98,20 @@ uint32_t Block::lastDocID(uint8_t ind){
 // flushes out the last docid list and the list for the compressed size of 
 // the docid lists
 // Assumes that you are using this when you are flushing out a whole block
-void Block::flushMetaData(){
+void Block::flushMetaData(int num){
     for (int i=0;i<NUM_CHUNKS;i++){
+        if (num == 141885){
+            cout <<  lastDocID(i) << " ";
+        }
         byteWrite(metaFile, lastDocID(i), sizeof(uint32_t));
     }
+    if (num == 141885){cout << endl;}
     for (int i=0;i<NUM_CHUNKS;i++){
+        if (num == 141885){
+            cout <<  compressedChunkSizes[i] << " ";
+        }
         byteWrite(metaFile, compressedChunkSizes[i], sizeof(uint32_t));
     }
-    *metaFile << std::endl;
 }
 
 void Block::subtractionCompress(){
@@ -153,8 +177,8 @@ the number continues into the next byte, and write the remaining 7 bits of that 
 
 At the end its guaranteed to fit within a 7 bit number
 */
-uint16_t encodeNum(std::ofstream* output, uint32_t num) {
-    uint16_t count = 1;
+uint32_t encodeNum(std::ofstream* output, uint32_t num) {
+    uint32_t count = 1;
     while (num >= 128) {
         uint8_t currByte = 128 + (num & 127);
         output->write(reinterpret_cast<const char*>(&currByte), sizeof(uint8_t));

@@ -41,10 +41,10 @@ class Block {
     Chunk* currChunk();
     // to flush contents into a file. This code will assume the block it is 
     // flushing is not the final block (not an incomplete one)
-    uint32_t flush(); // to flush contents into a file 
+    uint32_t flush(int num); // to flush contents into a file 
     // flushes out the last docid list and the list for the compressed size of 
     // the docid lists
-    void flushMetaData();
+    void flushMetaData(int num);
     void subtractionCompress();
     uint32_t lastDocID(uint8_t ind);
 
