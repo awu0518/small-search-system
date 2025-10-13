@@ -73,10 +73,9 @@ uint32_t Block::flush(int num){
         // Write frequencies
         for (int j = start; j < end; j++) {
             byteWrite(indexFile, chunks[i].freqList[j], sizeof(uint8_t));
-            chunkBytes++;
         }
 
-        compressedChunkSizes[i] += chunkBytes;
+        compressedDocIDSizes[i] += chunkBytes;
         totalBytesFlushed += chunkBytes;
     }
 
@@ -107,12 +106,9 @@ void Block::flushMetaData(int num){
             cout <<  lastDocIDs[i] << " ";
         }
     }
-    if (num == 1600){cout << endl;}
     for (int i=0;i<NUM_CHUNKS;i++){
-        if (num == 1600){
-            cout <<  compressedChunkSizes[i] << " ";
-        }
-        byteWrite(metaFile, compressedChunkSizes[i], sizeof(uint32_t));
+        
+        byteWrite(metaFile, compressedDocIDSizes[i], sizeof(uint32_t));
     }
 }
 
@@ -153,7 +149,7 @@ void Block::reset(){
     currListInd = 0;
     flushedChunkInd = 0;
     flushedListInd = 0;
-    memset(compressedChunkSizes, 0, sizeof(compressedChunkSizes));
+    memset(compressedDocIDSizes, 0, sizeof(compressedDocIDSizes));
     memset(lastDocIDs, 0, sizeof(lastDocIDs));
     for (int i=0;i<NUM_CHUNKS;i++){
         chunks[i].reset();

@@ -41,6 +41,18 @@ int main() {
     std::ofstream metaData("metaData.txt",  std::ios::binary | std::ios::in | std::ios::out);
     std::ofstream blockLocation("blockLocation.txt");
     std::ofstream lexiconFile("lexicon.txt");
+    if (!index.is_open()) {
+        // File didn't exist, create it
+        std::ofstream temp("index.txt", std::ios::binary);
+        temp.close();
+        index.open("index.txt", std::ios::binary | std::ios::in | std::ios::out);
+    }
+    if (!metaData.is_open()) {
+        // File didn't exist, create it
+        std::ofstream temp("metaData.txt", std::ios::binary);
+        temp.close();
+        metaData.open("metaData.txt", std::ios::binary | std::ios::in | std::ios::out);
+    }
     if (!index || !metaData || !blockLocation || !lexiconFile) 
     { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
 
