@@ -510,7 +510,7 @@ void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
         uint32_t currDocId = 0;
         for (size_t currDocIndex = 0; currDocIndex < currList->numDocs; currDocIndex++) {
             currDocId = findNextDocID(currList, currDocId);
-            // if (currDocId == N) break;
+            if (currDocId == N) break;
             essentialDocIds.push_back(std::pair<uint32_t, double>(currDocId, bm25(currList, pageTable.at(currDocId))));
             currDocId++;
             
@@ -536,7 +536,7 @@ void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
 
         for (size_t j = numEssential; j < lists.size(); j++) {
             if (findNextDocID(lists[j].second, currDocId) == currDocId) {
-                // if (currDocId == N) break;
+                if (currDocId == N) break;
                 currImpact += bm25(lists[j].second, pageTable.at(currDocId));
             }
         }
