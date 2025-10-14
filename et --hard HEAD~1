@@ -1,0 +1,77 @@
+[33m4c9844d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mskibidi[m[33m)[m fixed meta data stuff
+[33md0c48e6[m[33m ([m[1;31morigin/skibidi[m[33m)[m last doc ids are bad
+[33mf4ab9ce[m Write index
+[33mba11358[m need to handle the reading of the end of the file
+[33m6db67df[m change comment on size
+[33m6aa7502[m 6400 not 64kb :(
+[33mcc53b7b[m update decodeNum and adds uncompression to findNextDocID
+[33m9488ef6[m update decodeNum and adds uncompression to findNextDocID
+[33m4dd8f31[m second query stuff
+[33m2d50558[m update findNextDocID
+[33m874b839[m adds function to search for a docID
+[33m9a8aa77[m init query modification
+[33m2ceabf3[m update K1 const
+[33m87ef384[m starter query.cpp code
+[33m6938b3e[m made flush print out the docid and freq lists
+[33m91aab4e[m finished up substraction compression stuff. need to be able to update inv index start and end byte
+[33m580e18f[m made flush print out the docid and freq lists
+[33m8d02f71[m fix write for last chunk
+[33mf7f8644[m finished final flush()
+[33me2e7d36[m added some stuff to flush
+[33m4de7b63[m Writes the current position of the output stream to a new file at the end of each block, this file will be read into main memory at the start of querying
+[33m2f83ef3[m write index file byte location not blockLocation byte location
+[33mcb64c8f[m remove temp files
+[33m8a05911[m adds writing block byte locations to an additional file
+[33ma476b2d[m Merge branch 'main' of https://github.com/awu0518/small-search-system into skibidi
+[33mf0d8537[m Merge pull request #12 from awu0518/awu0518-lexicon
+[33m4c559bd[m updates lexicon to store blockNum, chunkNum, chunkPos, and list length
+[33m1336060[m Merge branch 'main' of https://github.com/awu0518/small-search-system into skibidi
+[33m4f39d9e[m sdf
+[33mb0d74c4[m Merge pull request #11 from awu0518/awu0518-termToWord
+[33mba4e8bf[m Update index.cpp comment
+[33m39deff2[m reads termToWord file and maps lexicon with words
+[33m590b9d2[m create index
+[33m12f1971[m Merge branch 'main' into skibidi
+[33mce6cb23[m fixed more changes
+[33m53eced8[m fixed some changes
+[33m20030a9[m added some stuff to flush. not finished tho
+[33m815bab1[m[33m ([m[1;32mmain[m[33m)[m Merge pull request #9 from awu0518/awu0518-varbyte
+[33m63b1d37[m added last docid in metadata
+[33m347f96c[m most basic logic down
+[33m9c9657d[m[33m ([m[1;31morigin/awu0518-varbyte[m[33m)[m update input to open in ios::binary
+[33mf67cd41[m creates query.cpp with decodeNum and debugging code
+[33mef3dbef[m update encodeNum to cast byte
+[33mfa4dba5[m adds encoding a number using varbyte
+[33m564c00c[m init index
+[33m383af54[m Merge branch 'main' into skibidi
+[33m9243e06[m removed vscode
+[33m0daa281[m init changes
+[33m7e0b3e4[m Merge pull request #7 from awu0518/awu0518-index
+[33m231b91c[m init index
+[33md3f35bc[m update loop condition and fix undefined array
+[33mf2295ed[m basic structure for index.cpp and move methods from readCollection.cpp
+[33mb4e438e[m adds cstdint to headers
+[33m27bae83[m removes lexicon from readCollection.cpp
+[33maf73160[m adds more comments
+[33mb51a347[m improves readability and fix index bug
+[33md7718e2[m merges temporary files
+[33m7e0d416[m Adds writing to files
+[33m68d6fe3[m adds i/o efficient merge sort
+[33mbba0c9e[m fix bugs w loop variables and missing output
+[33m55d655d[m adds writing to files
+[33m3c94dab[m Merge pull request #3 from awu0518/skibidi
+[33m1877f3a[m Merge branch 'main' into skibidi
+[33m1ca10c1[m remove unwanted files
+[33m310351e[m no bs files
+[33mf116ff4[m no py
+[33m2107a0c[m Merge pull request #1 from awu0518/skibidi
+[33m3b2b561[m fix on comments
+[33md845b6a[m word shortening addition
+[33md231515[m rename file to match the purpose of the 3 required scripts
+[33mc0ca6ca[m adds grouping after a sort to write to file
+[33mfcac37a[m adds tokenizing for strings and packs results to buffer
+[33m9486fcc[m adds splitting and uint manipulation
+[33mfbb2d0d[m remove c file
+[33m1335ddc[m swap to c++
+[33m4302cf7[m update file and add basic script for reading
+[33m5a987ce[m adds .gitignore for fulldocs.tsv

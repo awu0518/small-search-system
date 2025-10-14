@@ -201,7 +201,7 @@ int main() {
 
         for (const std::string& token : tokens) { 
             InvertedList* currList = openInvertedList(lexicon[token], index);
-            // dumpInvertedList(currList);
+            dumpInvertedList(currList);
             lists.push_back(std::pair<uint32_t, InvertedList*>(currList->numDocs, currList));
         }
 
