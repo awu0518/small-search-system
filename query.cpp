@@ -31,8 +31,7 @@ struct UncompressedChunk {
         memset(freq, 0, sizeof(freq));
     }
 };
-uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos);
-uint32_t decodeNumFromFile(std::ifstream& file);
+
 struct InvertedList {
     std::vector<uint32_t> lastDocIds;
     std::vector<uint32_t> docIdBytes;
@@ -42,71 +41,19 @@ struct InvertedList {
     UncompressedChunk* currUncompressedChunk = nullptr;
     uint8_t elemsInFirstChunk;
     uint8_t elemsInLastChunk;
-    ~InvertedList(){
-        for (Chunk* c: compressedChunks){
-            if (c!=nullptr) delete c;
-        }
-        if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
-    }
-    void uncompressChunk(int chunkNum, uint32_t elems) {
-        if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
-        currUncompressedChunk = new UncompressedChunk();
-        size_t index = 0;
-        for (int numDecoded = 0; numDecoded < elems; numDecoded++) {
-            currUncompressedChunk->docIds[numDecoded] = decodeNum(compressedChunks[chunkNum]->compressedDocIds, index);
-            currUncompressedChunk->freq[numDecoded] = compressedChunks[chunkNum]->freq[numDecoded];
-            currUncompressedChunk->currPos = numDecoded;
-        }
-        for (int i=1;i<currUncompressedChunk->currPos+1;i++){
-            currUncompressedChunk->docIds[i] += currUncompressedChunk->docIds[i-1];
-        }
-    }
 };
 
 struct LexiconInvertedList {
     std::vector<uint32_t> docIdBytes;   
     std::vector<uint32_t> lastDocIds;   
     int32_t startByte = 0;
-    uint32_t numChunks = 0;
     uint32_t elemsFirstChunk = 0;
     uint32_t elemsLastChunk = 0;
     uint32_t firstChunkPos = 0;
     uint32_t lastChunkPos = 0;
 };
 
-void printLexiconEntry(const std::unordered_map<std::string, LexiconInvertedList*>& lexicon,
-                       const std::string& term) 
-{
-    auto it = lexicon.find(term);
-    if (it == lexicon.end()) {
-        std::cerr << "Term '" << term << "' not found in lexicon.\n";
-        return;
-    }
 
-    const LexiconInvertedList* data = it->second;
-
-    std::cout << "Lexicon entry for term '" << term << "':\n";
-    std::cout << "  startByte: " << data->startByte << "\n";
-    std::cout << "  numChunks: " << data->numChunks << "\n";
-    std::cout << "  elemsFirstChunk: " << data->elemsFirstChunk << "\n";
-    std::cout << "  elemsLastChunk: " << data->elemsLastChunk << "\n";
-    std::cout << "  firstChunkPos: " << data->firstChunkPos << "\n";
-    std::cout << "  lastChunkPos: " << data->lastChunkPos << "\n";
-
-    std::cout << "  docIdBytes: [";
-    for (size_t i = 0; i < data->docIdBytes.size(); i++) {
-        std::cout << data->docIdBytes[i];
-        if (i + 1 < data->docIdBytes.size()) std::cout << ", ";
-    }
-    std::cout << "]\n";
-
-    std::cout << "  lastDocIds: [";
-    for (size_t i = 0; i < data->lastDocIds.size(); i++) {
-        std::cout << data->lastDocIds[i];
-        if (i + 1 < data->lastDocIds.size()) std::cout << ", ";
-    }
-    std::cout << "]\n";
-}
 
 struct Compare {
     bool operator()(const std::pair<double, uint32_t>& a,
@@ -114,7 +61,8 @@ struct Compare {
         return a.first > b.first;  // min-heap based on the double
     }
 };
-
+uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos);
+uint32_t decodeNumFromFile(std::ifstream& file);
 void readPageTable(std::unordered_map<uint32_t, uint16_t>&);
 void readLexicon(std::unordered_map<std::string, LexiconInvertedList*>&);
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens);
@@ -125,7 +73,8 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     const std::unordered_map<uint32_t, uint16_t>& pageTable);
 void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists, 
     const std::unordered_map<uint32_t, uint16_t>& pageTable);
-
+void printLexiconEntry(const std::unordered_map<std::string, LexiconInvertedList*>& lexicon,
+                       const std::string& term);
 static inline int chunkLenFor(const InvertedList* L, uint32_t i) {
     if (i == 0) return L->elemsInFirstChunk;
     if (i + 1 == L->lastDocIds.size()) return L->elemsInLastChunk;
@@ -294,13 +243,12 @@ void readLexicon(std::unordered_map<std::string, LexiconInvertedList*>& lexicon)
         std::istringstream ss(line);
 
         std::string word;
-        uint32_t startByte, numChunks, elemsFirstChunk, elemsLastChunk, firstChunkPos, lastChunkPos;
+        uint32_t startByte, elemsFirstChunk, elemsLastChunk, firstChunkPos, lastChunkPos;
 
-        ss >> word >> startByte >> numChunks >> elemsFirstChunk >> elemsLastChunk >> firstChunkPos >> lastChunkPos;
+        ss >> word >> startByte >> elemsFirstChunk >> elemsLastChunk >> firstChunkPos >> lastChunkPos;
 
         LexiconInvertedList* currLexiconEntry = new LexiconInvertedList{};
         currLexiconEntry->startByte = startByte;
-        currLexiconEntry->numChunks = numChunks;
         currLexiconEntry->elemsFirstChunk = elemsFirstChunk;
         currLexiconEntry->elemsLastChunk = elemsLastChunk;
         currLexiconEntry->firstChunkPos = firstChunkPos;
@@ -417,7 +365,7 @@ static inline uint32_t totalPostings(const LexiconInvertedList* e) {
 }
 
 void skipElems(std::ifstream& index, uint32_t numElems){
-    for (int i=0;i<numElems;i++){
+    for (uint32_t i=0;i<numElems;i++){
         decodeNumFromFile(index);
     }
 }
@@ -429,8 +377,6 @@ InvertedList* openInvertedList(LexiconInvertedList* lexiconMetadata, std::ifstre
     currList->lastDocIds = lexiconMetadata->lastDocIds;
     currList->elemsInFirstChunk = lexiconMetadata->elemsFirstChunk;
     currList->elemsInLastChunk = lexiconMetadata->elemsLastChunk;
-    // currList->firstChunkPos = firstChunkPos;
-    // currList->lastChunkPos = lastChunkPos;
     currList->numDocs = totalPostings(lexiconMetadata);
 
     index.seekg(static_cast<std::streamoff>(lexiconMetadata->startByte), std::ios::beg);
@@ -568,4 +514,37 @@ void disjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     for (size_t i = topSearches.size(); i > 0; i--) {
         std::cout << "Impact Score: " << topSearches[i-1].first << " DocID: " << topSearches[i-1].second << std::endl;
     }
+}
+
+void printLexiconEntry(const std::unordered_map<std::string, LexiconInvertedList*>& lexicon,
+                       const std::string& term) 
+{
+    auto it = lexicon.find(term);
+    if (it == lexicon.end()) {
+        std::cerr << "Term '" << term << "' not found in lexicon.\n";
+        return;
+    }
+
+    const LexiconInvertedList* data = it->second;
+
+    std::cout << "Lexicon entry for term '" << term << "':\n";
+    std::cout << "  startByte: " << data->startByte << "\n";
+    std::cout << "  elemsFirstChunk: " << data->elemsFirstChunk << "\n";
+    std::cout << "  elemsLastChunk: " << data->elemsLastChunk << "\n";
+    std::cout << "  firstChunkPos: " << data->firstChunkPos << "\n";
+    std::cout << "  lastChunkPos: " << data->lastChunkPos << "\n";
+
+    std::cout << "  docIdBytes: [";
+    for (size_t i = 0; i < data->docIdBytes.size(); i++) {
+        std::cout << data->docIdBytes[i];
+        if (i + 1 < data->docIdBytes.size()) std::cout << ", ";
+    }
+    std::cout << "]\n";
+
+    std::cout << "  lastDocIds: [";
+    for (size_t i = 0; i < data->lastDocIds.size(); i++) {
+        std::cout << data->lastDocIds[i];
+        if (i + 1 < data->lastDocIds.size()) std::cout << ", ";
+    }
+    std::cout << "]\n";
 }
