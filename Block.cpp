@@ -176,6 +176,15 @@ the number continues into the next byte, and write the remaining 7 bits of that 
 
 At the end its guaranteed to fit within a 7 bit number
 */
+uint32_t encodedNumSize(uint32_t num) {
+    uint32_t count = 1;
+    while (num >= 128) {
+        uint8_t currByte = 128 + (num & 127);
+        num = num >> 7;
+        count++;
+    }
+    return count;
+}
 uint32_t encodeNum(std::ofstream* output, uint32_t num) {
     uint32_t count = 1;
     while (num >= 128) {

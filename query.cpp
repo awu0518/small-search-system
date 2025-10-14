@@ -19,7 +19,10 @@ struct lexiconData {
     uint32_t startBlockNum;
     uint32_t endBlockNum;
     uint32_t startChunkNum;
+    uint32_t endChunkNum;
     uint32_t startChunkPos;
+    uint32_t endChunkPos;
+
     uint32_t listLen;
     uint32_t startByte;
     uint32_t endByte;
@@ -87,7 +90,7 @@ uint32_t findNextDocID(InvertedList& currList, uint32_t target);
 void conjunctiveDAAT();
 void disjunctiveDAAT();
 void loadLexicon(std::vector<lexiconData>& lexicons, std::ifstream& lexFile);
-void loadMetaData(uint32_t start, uint32_t end, std::vector<uint32_t>& lastDocIds, std::vector<uint32_t>& docIdBytes);
+void loadMetaData(uint32_t start, uint32_t end, uint32_t,  std::vector<uint32_t>& lastDocIds, std::vector<uint32_t>& docIdBytes);
 void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedList& invList);
 
 using namespace std;
@@ -102,30 +105,49 @@ int main() {
     loadLexicon(lexicons, lexFile);
 
 // 1471949
-    int ind = 0;
+    int ind = 49;
     for (int i=ind;i<ind+1;i++){
     cout << "len: " <<  lexicons[i].listLen <<  " " << lexicons[i].startBlockNum << " " <<  lexicons[i].endBlockNum << " " << lexicons[i].endByte - lexicons[i].startByte 
     << " " << lexicons[i].startBlockNum << endl;
     }
-    getInvertedIndex(0, lexicons, invList);
+    getInvertedIndex(ind, lexicons, invList);
     cout << invList.lastDocIds.size() << endl;
     cout << invList.docIdBytes.size() << endl;
     cout << invList.compressedChunks.size() << endl;   
     cout << invList.compressedChunks.back()->compressedDocIds.size() << endl;   
-    // int total = 0;
-    // for (int i=0;i<invList.compressedChunks.size();i++){
-    //     total += invList.compressedChunks[i]->compressedDocIds.size();
-    //     for (int j=0;j<128 && invList.compressedChunks[i]->freq[j] != 0;j++){
-    //         total++;
+    int byteTotal = 0;
+    for (int i=0;i<invList.docIdBytes.size();i++){
+        cout << invList.docIdBytes[i] << " ";
+        byteTotal += invList.docIdBytes[i];
+    }
+    cout << endl;
+    cout << "byte total: " << byteTotal << endl;
+    // for (int i=0;i<lexicons.size();i++){
+    //     getInvertedIndex(i, lexicons, invList);
+    //     int total = 0;
+    //     for (int i=0;i<invList.compressedChunks.size();i++){
+    //         total += invList.compressedChunks[i]->compressedDocIds.size();
+    //         for (int j=0;j<128 && invList.compressedChunks[i]->freq[j] != 0;j++){
+    //             total++;
+    //         }
+    //     }
+    //     if (total != lexicons[i].endByte - lexicons[i].startByte){
+    //         cout << "mismatch " << i << " " << total << " " << lexicons[i].endByte - lexicons[i].startByte << endl;
     //     }
     // }
-    // cout << total << endl;
-    // cout << lexicons[0].endByte - lexicons[0].startByte << endl;
-    
-    invList.uncompressChunk(0);
-    for (int i=0;i<128;i++){
-        cout << invList.currUncompressedChunk->docIds[i] << " ";
+    int total = 0;
+    for (int i=0;i<invList.compressedChunks.size();i++){
+        total += invList.compressedChunks[i]->compressedDocIds.size();
+        for (int j=0;j<invList.compressedChunks[i]->finalInd;j++){
+            total++;
+        }
     }
+    cout << "what we got: " << total << endl;
+    cout << "true size: "<<  lexicons[ind].endByte - lexicons[ind].startByte << endl;
+    // invList.uncompressChunk(0);
+    // for (int i=0;i<128;i++){
+    //     cout << invList.currUncompressedChunk->docIds[i] << " ";
+    // }
 }
 
 uint32_t decodeNum(const std::vector<uint8_t>& bytes, size_t& currPos) {
@@ -221,8 +243,8 @@ void disjunctiveDAAT() {
 void loadLexicon(std::vector<lexiconData>& lexicons, std::ifstream& lexFile){
     lexiconData tempLex;
     while (lexFile){
-        lexFile >> tempLex.termid >> tempLex.startBlockNum >> 
-        tempLex.endBlockNum >> tempLex.startChunkNum >> tempLex.startChunkPos >> 
+        lexFile >> tempLex.termid >> tempLex.startBlockNum >>
+        tempLex.endBlockNum >> tempLex.startChunkNum >> tempLex.endChunkNum >> tempLex.startChunkPos >> tempLex.endChunkPos >>
         tempLex.listLen >> tempLex.startByte >> tempLex.endByte;
 
         lexicons.push_back(tempLex);
@@ -241,34 +263,39 @@ void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedLi
         exit(1);
     }
     lexiconData lex = lexicons[termid];
-    loadMetaData(lex.startBlockNum, lex.endBlockNum, invList.lastDocIds, invList.docIdBytes);
+    loadMetaData(lex.startBlockNum, lex.endBlockNum, lex.startChunkNum, invList.lastDocIds, invList.docIdBytes);
+
     indexFile.seekg(lex.startByte, std::ios::beg);
     
     Chunk* tempChunk = new Chunk();
-    int currChunk = 0;
+    int currChunk = lex.startChunkNum;
     uint8_t tempNum;
     uint32_t totalBytesRead = 0;
     uint32_t maxBytes = lex.endByte - lex.startByte; 
     // uint32_t maxBytes = 356;
 
     cout << "start size: " <<  invList.docIdBytes[currChunk] << endl;
-    for (uint32_t i=0;i<invList.docIdBytes[currChunk];i++){
+    uint32_t endPos = (currChunk == lex.endChunkNum) ? lex.listLen: invList.docIdBytes[currChunk];
+    uint32_t startPos = (currChunk == lex.startChunkNum) ? 0 : ;
+    for (uint32_t i=0;i<endPos;i++){
         indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
 
         tempChunk->compressedDocIds.push_back(tempNum);
         totalBytesRead++;
-
     }
-    for (uint8_t i=invList.startPositionFirst;i<CHUNK_SIZE;i++){
+    endPos = (currChunk == lex.endChunkNum) ? lex.endChunkPos : CHUNK_SIZE;
+    for (uint8_t i=lex.startChunkPos;i<endPos;i++){
         indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
 
         tempChunk->freq[i] = tempNum;
         totalBytesRead++;
+        tempChunk->finalInd = i+1;
 
     }
     invList.compressedChunks.push_back(tempChunk);
     currChunk++;
     while (true){
+        // cout << "sdfsdf size: " <<invList.docIdBytes[currChunk] << endl; 50774
         if (totalBytesRead >= maxBytes || !indexFile){ 
             return;
         }
@@ -277,6 +304,7 @@ void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedLi
             indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
             tempChunk->compressedDocIds.push_back(tempNum);
             totalBytesRead++;
+            cout << "total read: " << totalBytesRead << " curr: " << i << " out of " << invList.docIdBytes[currChunk] << endl;   
         }
         for (uint8_t i=0;i<CHUNK_SIZE;i++){
             indexFile.read(reinterpret_cast<char*>(&tempNum), sizeof(uint8_t));
@@ -298,7 +326,7 @@ void getInvertedIndex(int termid, std::vector<lexiconData>& lexicons, InvertedLi
     
 }   
 
-void loadMetaData(uint32_t start, uint32_t end,
+void loadMetaData(uint32_t start, uint32_t end, uint32_t chunkNum, 
                   std::vector<uint32_t>& lastDocIds,
                   std::vector<uint32_t>& docIdBytes) {
 

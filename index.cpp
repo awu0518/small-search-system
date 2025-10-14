@@ -18,7 +18,10 @@ struct lexiconData {
     uint32_t startBlockNum;
     uint32_t endBlockNum;
     uint32_t startChunkNum;
+    uint32_t endChunkNum;
     uint32_t startChunkPos;
+    uint32_t endChunkPos;
+
     uint32_t listLen;
     uint32_t startByte;
     uint32_t endByte;
@@ -82,7 +85,7 @@ int main() {
         // cout << count << endl;
         
         if (count == 0){
-            lexicon[termid] = lexiconData{0, 0, 0, 0, 0, 0, 0}; // set up first 
+            lexicon[termid] = lexiconData{0, 0, 0, 0, 0, 0, 0, 0, 0}; // set up first 
             // entry into the lexicon
         }
         
@@ -95,13 +98,18 @@ int main() {
             lexicon[termid] = lexiconData{currBlock, 
                                             0,
                                             bufferBlock.currChunkInd, 
+                                            0,
                                             bufferBlock.currListInd, 
-                                            0, static_cast<uint32_t>(index.tellp()), 
+                                            0,
+                                            0, 
+                                            static_cast<uint32_t>(index.tellp()), 
                                             0};
             
             lexicon[prevTermID].listLen = termCount; // now we know how many entries the term had
             lexicon[prevTermID].endByte = index.tellp();
             lexicon[prevTermID].endBlockNum = currBlock;
+            lexicon[prevTermID].endChunkNum = bufferBlock.currChunkInd;
+            lexicon[prevTermID].endChunkPos = bufferBlock.currListInd;  
             termCount = 0;
         }
         bufferBlock.addToChunk(docid, (uint8_t)freq);
@@ -132,6 +140,8 @@ int main() {
             lexicon[prevTermID].listLen = termCount; // now we know how many entries the term had
             lexicon[prevTermID].endByte = index.tellp();
             lexicon[prevTermID].endBlockNum = currBlock;
+            lexicon[prevTermID].endChunkNum = bufferBlock.currChunkInd;
+            lexicon[prevTermID].endChunkPos = bufferBlock.currListInd;
             break;
         }
 
@@ -180,8 +190,8 @@ void readVector(std::vector<std::string>& words) {
 
 void writeLex(std::ofstream& lexFile, std::unordered_map<uint32_t, lexiconData> lexicon){
     for (const auto& [term, data] : lexicon) {
-        lexFile << term << " " << data.startBlockNum << " " << data.endBlockNum << " " << data.startChunkNum 
-        << " " << data.startChunkPos << " " << data.listLen << " " 
+        lexFile << term << " " << data.startBlockNum << " " << data.endBlockNum << " " << data.startChunkNum << " " << data.endChunkNum 
+        << " " << data.startChunkPos << " " << data.endChunkPos << " " << data.listLen << " " 
         << data.startByte << " " << data.endByte << " "; 
     }
 }
