@@ -42,6 +42,12 @@ struct InvertedList {
     UncompressedChunk* currUncompressedChunk = nullptr;
     uint8_t elemsInFirstChunk;
     uint8_t elemsInLastChunk;
+    ~InvertedList(){
+        for (Chunk* c: compressedChunks){
+            if (c!=nullptr) delete c;
+        }
+        if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
+    }
     void uncompressChunk(int chunkNum, uint32_t elems) {
         if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
         currUncompressedChunk = new UncompressedChunk();
@@ -201,7 +207,7 @@ int main() {
 
         for (const std::string& token : tokens) { 
             InvertedList* currList = openInvertedList(lexicon[token], index);
-            dumpInvertedList(currList);
+            // dumpInvertedList(currList);
             lists.push_back(std::pair<uint32_t, InvertedList*>(currList->numDocs, currList));
         }
 
@@ -462,11 +468,13 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
     while ((currDocId = findNextDocID(baseList, currDocId)) != N) {
         size_t index = 1;
         // std::cout << "Attempting search on docID: " << currDocId << std::endl;
+        uint32_t res = 0;
         for (; index < lists.size(); index++) {
             // std::cout << "Attempting inner search on list: " << index << std::endl;
-            if (findNextDocID(lists[index].second, currDocId) != currDocId) { break; }
+            res = findNextDocID(lists[index].second, currDocId);
+            if (res != currDocId && res == N ) { break; }
         }
-        
+        if (res == N) break;
         if (index == lists.size()) {
             double impactScore = 0;
             for (size_t j = 0; j < lists.size(); j++) {
