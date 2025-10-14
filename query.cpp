@@ -4,6 +4,7 @@
 #include <vector>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <cmath>
 #include <algorithm>
 #include <queue>
@@ -41,6 +42,19 @@ struct InvertedList {
     UncompressedChunk* currUncompressedChunk = nullptr;
     uint8_t elemsInFirstChunk;
     uint8_t elemsInLastChunk;
+    void uncompressChunk(int chunkNum, uint32_t elems) {
+        if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
+        currUncompressedChunk = new UncompressedChunk();
+        size_t index = 0;
+        for (uint32_t numDecoded = 0; numDecoded < elems; numDecoded++) {
+            currUncompressedChunk->docIds[numDecoded] = decodeNum(compressedChunks[chunkNum]->compressedDocIds, index);
+            currUncompressedChunk->freq[numDecoded] = compressedChunks[chunkNum]->freq[numDecoded];
+            currUncompressedChunk->currPos = numDecoded;
+        }
+        for (int i=1;i<currUncompressedChunk->currPos+1;i++){
+            currUncompressedChunk->docIds[i] += currUncompressedChunk->docIds[i-1];
+        }
+    }
 };
 
 struct LexiconInvertedList {
@@ -144,6 +158,9 @@ int main() {
     std::unordered_map<std::string, LexiconInvertedList*> lexicon;
     readLexicon(lexicon);
     std::string query; bool mode; std::vector<std::string> tokens;
+
+    std::ofstream dumpIndex("dumpIndex");
+
     while (true) {
         std::cout << "Enter query: ";
         std::getline(std::cin, query);
@@ -155,6 +172,11 @@ int main() {
         std::vector<std::pair<uint32_t, InvertedList*>> lists;
 
         for (const std::string& token : tokens) { 
+            auto it = lexicon.find(token);
+            if (it == lexicon.end()) {
+                std::cerr << "[WARN] docID " << token << " missing from lexicon\n";
+                continue;
+            }
             InvertedList* currList = openInvertedList(lexicon[token], index);
             // dumpInvertedList(currList);
             lists.push_back(std::pair<uint32_t, InvertedList*>(currList->numDocs, currList));
@@ -164,6 +186,14 @@ int main() {
 
         if (!mode) { conjunctiveDAAT(lists, pageTable); }
         else { disjunctiveDAAT(lists, pageTable); }
+
+        for (size_t i = 0; i < lists.size(); i++) {
+            InvertedList* currList = lists[i].second;
+            for (Chunk* chunk : currList->compressedChunks) {
+                delete chunk;
+            }
+            delete currList;
+        }
     }
     // InvertedList* currList = openInvertedList(lexicon["triticale"], index);
     // int count = 0;
@@ -273,24 +303,39 @@ nonalphanumeric characters except those within words
 TODO: remove duplicate words
 */
 void tokenizeString(const std::string& line, std::vector<std::string>& tokens) {
+    // static const std::unordered_set<std::string> stopWords = {
+    //     "a", "an", "and", "are", "as", "at", "be", "by", "for",
+    //     "from", "has", "he", "in", "is", "it", "its", "of", "on",
+    //     "that", "the", "to", "was", "were", "will", "with", "this",
+    //     "these", "those", "their", "they", "i", "you", "your",
+    //     "she", "his", "her", "them", "or", "but", "not", "we",
+    //     "what", "which", "who", "when", "where", "why", "how"
+    // };
+
+    static const std::unordered_set<std::string> stopWords = {
+        "the"
+    };
+
     tokens.clear();
     std::string tempString;
     
     for (char ch : line) {
-        if (isalnum(ch)) { tempString.push_back((char)tolower(ch));}
-        else { 
-            if (tempString.size() == 0) { continue; }
-
-            tokens.push_back(tempString);        
+        if (isalnum(ch)) {
+            tempString.push_back((char)tolower(ch));
+        } else {
+            if (tempString.empty()) continue;
+            if (!stopWords.count(tempString)) {
+                tokens.push_back(tempString);
+            }
             tempString.clear();
         }
     }
 
-    if (!tempString.empty()){
+    if (!tempString.empty() && !stopWords.count(tempString)) {
         tokens.push_back(tempString);
-        tempString.clear();
     }
 
+    // Remove duplicates and sort (optional but helps consistency)
     std::sort(tokens.begin(), tokens.end());
     tokens.erase(std::unique(tokens.begin(), tokens.end()), tokens.end());
 }
@@ -421,18 +466,27 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
             if (res != currDocId && res == N ) { break; }
         }
         if (res == N) break;
+        
+        bool missing = false;
         if (index == lists.size()) {
             double impactScore = 0;
             for (size_t j = 0; j < lists.size(); j++) {
-                InvertedList* currList = lists[j].second;
-                impactScore += bm25(currList, pageTable.at(currDocId)); 
+                    InvertedList* currList = lists[j].second;
+                    auto it = pageTable.find(currDocId);
+                    if (it == pageTable.end()) {
+                        std::cerr << "[WARN] docID " << currDocId << " missing from pageTable\n";
+                        missing = true;
+                        break;
+                    }
+                    impactScore += bm25(currList, it->second);
             }
 
-            if (heap.size() != 10) { heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); }
-            else if (heap.top().first < impactScore) {
-                heap.pop();
-                heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); 
-                
+            if (!missing) {
+                if (heap.size() != 10) { heap.push(std::pair<double, uint32_t>(impactScore, currDocId)); }
+                else if (heap.top().first < impactScore) {
+                    heap.pop();
+                    heap.push(std::pair<double, uint32_t>(impactScore, currDocId));  
+                }
             }
         }
 
