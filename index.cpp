@@ -1,140 +1,134 @@
-// assume 6400b blocks, lets say 10 chunks per block, chunks will contain 128 entries of docids/freq
-// max 32bits per docid, 1byte per freq
-// each entry in the mergedPreIndex looks like (packedNum, freq) = (termid + docid, freq)
 #include <iostream>
 #include <fstream>
-#include <vector>
-#include <unordered_map>
 #include <cstdint>
-#include <string.h>
+#include <vector>
+#include <limits>
+#include <unordered_map>
+#include <cmath>
 #include <algorithm>
-#include <regex>
-#include <filesystem>
-#include "Block.h"
-using namespace std; // fuck u alex
+#include <queue>
 
-uint32_t unpackTermID(uint64_t pack);
-uint32_t unpackDocID(uint64_t pack);
-void arrDifferences(uint32_t* arr, int start, int end);
-uint16_t encodeNum(std::ofstream* output, uint32_t num);
-void printArr(uint32_t* arr, int size);
-void readVector(std::vector<std::string>& words);
-void byteWrite(std::ofstream* output, uint32_t num, int size);
+const uint32_t CHUNK_SIZE = 128;
 
-
-struct lexiconData {
-    uint32_t startBlockNum;
-    uint32_t startChunkNum;
-    uint32_t startChunkPos;
-    uint32_t listLen;
-    uint32_t startByte;
-    uint32_t endByte;
+struct InvertedList {
+    std::vector<uint32_t> numBytes;
+    std::vector<uint32_t> lastDocIDs;
+    uint32_t firstChunkCounter = 0;
+    bool written = false;
 };
 
-int main() {
-    std::ifstream preind("mergedPreIndex");
-    if (!preind) { std::cerr << "Unable to open mergedPreIndex.txt"; exit(1); }
-    std::ofstream index("index.txt");
-    std::ofstream metaData("metaData.txt");
-    std::ofstream blockLocation("blockLocation.txt");
-    std::ofstream lexiconFile("lexicon.txt");
-    if (!index || !metaData || !blockLocation || !lexiconFile) 
-    { std::cerr << "Unable to open an output stream, check what files are missing\n"; exit(1); }
+struct Context {
+    InvertedList currList;
+    uint8_t firstChunkElems = 0;
+    uint8_t lastChunkElems = 0;
+    uint32_t chunkCounter = 0;
+    uint32_t lastTermID = UINT32_MAX;
 
-    int count = 0;
-    uint32_t freq;
-    uint64_t packedNum;
+    std::vector<uint32_t> docIDs;
+    std::vector<uint8_t> compressedDocIDs;
+    std::vector<uint8_t> freqs;
+};
 
-    std::vector<std::string> termToWord;
-    readVector(termToWord); 
-    std::unordered_map<std::string, lexiconData> lexicon; 
-    uint32_t currBlock = 0;
+void fillTermToWord(std::vector<std::string>& termToWord);
+uint32_t unpackTermID(uint64_t pack);
+uint32_t unpackDocID(uint64_t pack);
+void encodeNum(std::vector<uint8_t>& compressedDocIds, uint32_t num);
 
-    Block bufferBlock = Block(&index, &metaData, &blockLocation);
+void startNewTerm(Context& ctx, std::ofstream& index, std::ofstream& lexicon, const std::string& term) {
+    ctx.currList = InvertedList{};
+    ctx.currList.firstChunkCounter = ctx.chunkCounter;
+    ctx.currList.written = true;
+    ctx.firstChunkElems = ctx.lastChunkElems = 0;
 
-    uint32_t prevTermID = 0;
-    uint32_t termCount = 0;
-    uint32_t termid;
-    uint32_t docid;
-    uint32_t currIndexSize = 0;
-    while (true){ 
-        
-        preind >> packedNum; // get the packed num
-        preind >> freq; // next is the freq
-        
-        termid = unpackTermID(packedNum);
-        docid = unpackDocID(packedNum);
-        
-        if (termid != 1244 && count == 0 ){
-            continue;
-        }
-
-        // cout << termid << " " << docid << " " << freq  << " " << count << endl;
-        if (count > 500){
-            break;
-        }
-        if (count == 0){
-            lexicon[termToWord[termid]] = lexiconData{0, 0, 0, 0, 0, 0}; // set up first 
-            // entry into the lexicon
-        }
-        
-
-        if (bufferBlock.currChunkInd == 10){ 
-            // when printing out the final block check this to see if u had just printed out
-            // a block. This will prevent when things are perfectly aligned and no incomplete blocks exists and for that reason you print out
-            // the final block twice 
-            currBlock++;
-            bufferBlock.subtractionCompress();
-            
-            currIndexSize += bufferBlock.flush();
-            bufferBlock.flushMetaData();
-            blockLocation << currBlock << " " << index.tellp() << " "; 
-            bufferBlock.reset();
-
-        }
-        else if (prevTermID != termid){
-            
-            bufferBlock.subtractionCompress();
-            currIndexSize += bufferBlock.flush();
-            lexiconData lex = lexicon[termToWord[prevTermID]];
-            lexicon[termToWord[termid]] = lexiconData{currBlock, 
-                                                    bufferBlock.currChunkInd, 
-                                                    bufferBlock.currListInd, currIndexSize+1, 0, 0};
-            
-            lexicon[termToWord[prevTermID]].listLen = termCount; // now we know how many entries the term had
-            lexicon[termToWord[prevTermID]].endByte = currIndexSize;
-            
-            termCount = 0;
-            currIndexSize = 0;
-        }
-        bufferBlock.addToChunk(docid, (uint8_t)freq);
-        if (!index){
-            // bufferBlock.flushMetaData(); 
-            exit(1);
-        }
-        prevTermID = termid;
-        termCount++;
-        count++;
-
-    }
-
-    writeLex(lexiconFile, lexicon);
-
-    
-
-    // printArr(bufferBlock.chunks[0].freqList, 128);
-    // for (int i=0;i<128;i++){
-    //     cout << (int)bufferBlock.currChunk()->freqList[i] << " ";
-    // }
-    // cout << endl;
-    // bufferBlock.currChunkInd++;
-    // cout << "flush "<< endl;
-    // bufferBlock.flushLastBlock();
-    
+    lexicon << term << " " << index.tellp() << " ";
 }
 
+void addToChunk(Context& ctx, uint32_t docID, uint8_t freq) {
+    uint32_t diff = ctx.docIDs.empty() ? docID : (docID - ctx.docIDs.back());
+    encodeNum(ctx.compressedDocIDs, diff);
+    ctx.docIDs.push_back(docID);
+    ctx.freqs.push_back(freq);
+}
 
+void flushCurrentChunk(Context& ctx, std::ofstream& index) {
+    if (ctx.docIDs.empty()) return;
 
+    ctx.currList.lastDocIDs.push_back(ctx.docIDs.back());
+    ctx.currList.numBytes.push_back(ctx.compressedDocIDs.size());
+
+    uint8_t elems = ctx.docIDs.size();
+    if (ctx.firstChunkElems == 0) ctx.firstChunkElems = elems;
+    ctx.lastChunkElems = elems; 
+
+    index.write(reinterpret_cast<const char*>(ctx.compressedDocIDs.data()), static_cast<std::streamsize>(ctx.compressedDocIDs.size()));
+    index.write(reinterpret_cast<const char*>(ctx.freqs.data()), static_cast<std::streamsize>(ctx.freqs.size()));
+
+    ctx.docIDs.clear();
+    ctx.compressedDocIDs.clear();
+    ctx.freqs.clear();
+    ctx.chunkCounter++;
+}
+
+void finalizeTerm(Context& ctx, std::ofstream& lexicon, std::ofstream& index) {
+    if (!ctx.currList.written) return;
+
+    if (!ctx.docIDs.empty()) flushCurrentChunk(ctx, index);
+
+    uint32_t numChunks = ctx.currList.numBytes.size();
+    lexicon << int(ctx.firstChunkElems) << " " << int(numChunks) << " ";
+    for (size_t i = 0; i < ctx.currList.numBytes.size(); i++) {
+        lexicon << int(ctx.currList.numBytes[i]) << " " << int(ctx.currList.lastDocIDs[i]) << " ";
+    }
+    lexicon << int(ctx.lastChunkElems) << "\n";
+
+    ctx.currList = InvertedList{};
+    ctx.firstChunkElems = ctx.lastChunkElems = 0;
+}
+
+int main() {
+    std::ifstream preIndex("mergedPreIndex");
+    std::ofstream lexicon("lexicon");
+    std::ofstream index("index", std::ios::binary);
+
+    if (!preIndex) { std::cerr << "Failed to open preIndex\n"; exit(1); }
+    if (!lexicon) { std::cerr << "Failed to open lexicon\n"; exit(1); }
+    if (!index) { std::cerr << "Failed to open index\n"; exit(1); }
+
+    std::vector<std::string> termToWord;
+    fillTermToWord(termToWord);
+    std::cout << "Filled TermToWord  " << termToWord.size() << std::endl;
+
+    uint64_t packedNum; unsigned freq;
+    Context ctx;
+
+    while (preIndex >> packedNum >> freq) {
+        uint32_t termID = unpackTermID(packedNum), docID = unpackDocID(packedNum);
+        if (termID != ctx.lastTermID) {
+            std::cout << "Writing term " << termID << " " << termToWord[termID] << " to lexicon\n";
+            finalizeTerm(ctx, lexicon, index);
+            startNewTerm(ctx, index, lexicon, termToWord[termID]);
+            ctx.lastTermID = termID;
+        }
+
+        addToChunk(ctx, docID, freq);
+
+        if (ctx.docIDs.size() == CHUNK_SIZE) {
+            flushCurrentChunk(ctx, index);
+        }
+    }
+
+    finalizeTerm(ctx, lexicon, index);
+
+    preIndex.close(); lexicon.close(); index.close();
+}
+
+void fillTermToWord(std::vector<std::string>& termToWord) { 
+    std::ifstream file("tempFiles/termToWord");
+    std::string temp; 
+
+    while (file >> temp) { termToWord.push_back(temp); }
+    file.close();
+}
 
 /*
 Returns the first 32 bits of the packed number, which is the termID
@@ -150,28 +144,16 @@ uint32_t unpackDocID(uint64_t pack) {
     return uint32_t(pack & 0xffffffffu);
 }
 
-void printArr(uint32_t* arr, int size){
-    for (int i=0;i<size;i++){
-
-        cout << arr[i] << " ";
+/*
+Appends a number encoded in varByte into compressedDocIds
+*/
+void encodeNum(std::vector<uint8_t>& compressedDocIds, uint32_t num) {
+    while (num >= 128) {
+        uint8_t currByte = 128 + (num & 127);
+        compressedDocIds.push_back(currByte);
+        num = num >> 7;
     }
-    cout << endl;
 
-}
-
-void readVector(std::vector<std::string>& words) {
-    std::ifstream termToWord("tempFiles/termToWord");
-    if (!termToWord) { std::cerr << "Failed to open termToWord\n"; exit(1); }
-
-    std::string holder;
-    while (termToWord >> holder) { words.push_back(holder); }
-    termToWord.close();
-}
-
-void writeLex(std::ofstream& lexFile, std::unordered_map<std::string, lexiconData> lexicon){
-    for (const auto& [term, data] : lexicon) {
-        lexFile << term << " " << data.startBlockNum << " " << data.startChunkNum 
-        << " " << data.startChunkPos << " " << data.listLen << " " 
-        << data.startByte << " " << data.endByte << " "; 
-    }
+    uint8_t last = static_cast<uint8_t>(num);
+    compressedDocIds.push_back(last);
 }
