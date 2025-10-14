@@ -38,7 +38,7 @@ class Block {
 
     Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* blockLocation);
         
-    uint32_t addToChunk(uint32_t newID, uint8_t newFreq);
+    void addToChunk(uint32_t newID, uint8_t newFreq);
     Chunk* currChunk();
     // to flush contents into a file. This code will assume the block it is 
     // flushing is not the final block (not an incomplete one)
@@ -46,8 +46,7 @@ class Block {
     // flushes out the last docid list and the list for the compressed size of 
     // the docid lists
     void flushMetaData(int num);
-    void subtractionCompress();
-    uint32_t lastDocID(uint8_t ind);
-
+    uint32_t subtractionCompress();
+    uint32_t virtualFlush();
     void reset();
 };

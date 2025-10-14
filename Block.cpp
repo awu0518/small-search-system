@@ -10,10 +10,10 @@
 #include "Block.h"
 using namespace std;
 
-void arrDifferences(uint32_t* arr, int start, int end);
+uint32_t arrDifferences(uint32_t* arr, int start, int end);
 uint32_t encodeNum(std::ofstream* output, uint32_t num);
 void byteWrite(std::ofstream* output, uint32_t num, int size);
-
+uint32_t encodedNumSize(uint32_t num);
 Chunk::Chunk(){
     reset();
 }
@@ -38,51 +38,46 @@ Block::Block(std::ofstream* indexFile, std::ofstream* metaFile, std::ofstream* b
     reset();
 }
     
-uint32_t Block::addToChunk(uint32_t newID, uint8_t newFreq){
+void Block::addToChunk(uint32_t newID, uint8_t newFreq){
     chunks[currChunkInd].docIDList[currListInd] = newID; // append to docid list
     chunks[currChunkInd].freqList[currListInd] = newFreq; // append to freq list 
     currListInd++;
     if (currListInd == CHUNK_LIST_SIZE){
         lastDocIDs[currChunkInd] = newID; // record the last docid in chunk
-        currChunkInd++;
-        currListInd = 0;
     }
-    return false;
 }
 Chunk* Block::currChunk(){
     return &(chunks[currChunkInd]); 
+}
+
+
+// We are going to flush every time a chunck is complete
+// A virtual flush is to see how many bytes would be flushed if we were to flush
+// Will still rearrange flushedInd
+uint32_t Block::virtualFlush(){
+    uint32_t chunkBytes = 0;
+    // Write docIDs
+    for (int j = flushedListInd; j < currListInd; j++) {
+        chunkBytes += encodeNum(indexFile, chunks[0].docIDList[j]);
+    }
+    flushedListInd = currListInd;
+    return chunkBytes;
 }
 // to flush contents into a file and return how many bytes it has flushed
 // This code will assume the block it is 
 // flushing is not the final block (not an incomplete one)
 // flush() will assume either an inverted list is being flushed with the call
 uint32_t Block::flush(int num){
-     uint32_t totalBytesFlushed = 0;
-
-    for (int i = flushedChunkInd; i <= currChunkInd; i++) {
-        int start = (i == flushedChunkInd) ? flushedListInd : 0;
-        int end = (i == currChunkInd) ? currListInd : CHUNK_LIST_SIZE;
-
-        uint32_t chunkBytes = 0;
-
-        // Write docIDs
-        for (int j = start; j < end; j++) {
-            chunkBytes += encodeNum(indexFile, chunks[i].docIDList[j]);
-        }
-
-        // Write frequencies
-        for (int j = start; j < end; j++) {
-            byteWrite(indexFile, chunks[i].freqList[j], sizeof(uint8_t));
-        }
-
-        compressedDocIDSizes[i] += chunkBytes;
-        totalBytesFlushed += chunkBytes;
+    uint32_t chunkBytes = 0;
+    // Write docIDs
+    for (int j = flushedListInd; j < CHUNK_LIST_SIZE && chunks[0].freqList[j] !=0; j++) {
+        chunkBytes += encodeNum(indexFile, chunks[0].docIDList[j]);
     }
-
-    flushedChunkInd = currChunkInd;
+    for (int j = 0; j < CHUNK_LIST_SIZE && chunks[0].freqList[j] !=0; j++) {
+        byteWrite(indexFile, chunks[0].freqList[j], sizeof(uint8_t));
+    }
     flushedListInd = currListInd;
-
-    return totalBytesFlushed;
+    return chunkBytes;
 
 } 
 
@@ -112,38 +107,10 @@ void Block::flushMetaData(int num){
     }
 }
 
-void Block::subtractionCompress(){
-    // when the inverted index only spans a small part of a single chunk
-    if (flushedChunkInd == currChunkInd){
-        arrDifferences(chunks[currChunkInd].docIDList, flushedListInd, currListInd-1); 
-        return;
-    }
-    uint8_t endChunk = currChunkInd;
-    // if chunkListInd == 0, the prev chunks is full and the curr one is empty
-    // so we can just go to that prev chunk
-    if (currListInd != 0){
-        // this is for the case where the list extends to the prev chunk
-        // we know everything before the currListInd is part of the inverted
-        // list so we can compress that and move on
-        arrDifferences(chunks[currChunkInd].docIDList, 0, currListInd-1);
-    }
-    endChunk--; 
-
-    // when the inverted index spans multiple chunks
-    for (uint8_t i=endChunk;i>=flushedChunkInd;i--){
-        
-        uint8_t startPos = 0; // by default we assume we are going to compress
-        // the whole chunk
-        if (flushedChunkInd == i){// the only time we cannot assume that is 
-            // if this chunk is where the inverted list begins (since the begining 
-            // could be in the middle of the chunk)
-            startPos = flushedListInd;
-        }
-        arrDifferences(chunks[i].docIDList, startPos, CHUNK_LIST_SIZE-1);
-        if (i==0){break;}
-    }
+uint32_t Block::subtractionCompress(){
+    uint32_t endVal = arrDifferences(chunks[currChunkInd].docIDList, flushedListInd, currListInd-1);
+    return endVal;
 }
-
 void Block::reset(){
     currChunkInd = 0;
     currListInd = 0;
@@ -158,10 +125,12 @@ void Block::reset(){
 
 
 
-void arrDifferences(uint32_t* arr, int start, int end){
+uint32_t arrDifferences(uint32_t* arr, int start, int end){
+    uint32_t endVal = arr[end];
     for (int i=end; i>start; i--){
         arr[i] = arr[i] - arr[i-1];
     }
+    return endVal;
 }
 
 void byteWrite(std::ofstream* output, uint32_t num, int size){
@@ -179,7 +148,6 @@ At the end its guaranteed to fit within a 7 bit number
 uint32_t encodedNumSize(uint32_t num) {
     uint32_t count = 1;
     while (num >= 128) {
-        uint8_t currByte = 128 + (num & 127);
         num = num >> 7;
         count++;
     }
@@ -198,3 +166,4 @@ uint32_t encodeNum(std::ofstream* output, uint32_t num) {
     output->write(reinterpret_cast<const char*>(&last), sizeof(uint8_t));
     return count;
 }
+
