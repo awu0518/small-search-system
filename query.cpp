@@ -42,19 +42,7 @@ struct InvertedList {
     UncompressedChunk* currUncompressedChunk = nullptr;
     uint8_t elemsInFirstChunk;
     uint8_t elemsInLastChunk;
-    void uncompressChunk(int chunkNum, uint32_t elems) {
-        if (currUncompressedChunk != nullptr) delete currUncompressedChunk;
-        currUncompressedChunk = new UncompressedChunk();
-        size_t index = 0;
-        for (uint32_t numDecoded = 0; numDecoded < elems; numDecoded++) {
-            currUncompressedChunk->docIds[numDecoded] = decodeNum(compressedChunks[chunkNum]->compressedDocIds, index);
-            currUncompressedChunk->freq[numDecoded] = compressedChunks[chunkNum]->freq[numDecoded];
-            currUncompressedChunk->currPos = numDecoded;
-        }
-        for (int i=1;i<currUncompressedChunk->currPos+1;i++){
-            currUncompressedChunk->docIds[i] += currUncompressedChunk->docIds[i-1];
-        }
-    }
+   
 };
 
 struct LexiconInvertedList {
@@ -428,14 +416,13 @@ InvertedList* openInvertedList(LexiconInvertedList* lexiconMetadata, std::ifstre
     for (uint32_t i=0;i<lexiconMetadata->docIdBytes.size();i++){
         Chunk* chunk = new Chunk{};
         chunk->compressedDocIds.resize(currList->docIdBytes[i]); 
-
         index.read(reinterpret_cast<char*>(chunk->compressedDocIds.data()), static_cast<std::streamsize>(currList->docIdBytes[i]));
         if (i==0){
             skipElems(index, CHUNK_SIZE-(lexiconMetadata->elemsFirstChunk + lexiconMetadata->firstChunkPos));
             index.seekg(static_cast<std::streamoff>(index.tellg()) + lexiconMetadata->firstChunkPos, std::ios::beg);
         }
         else if (i == lexiconMetadata->docIdBytes.size()-1){
-            skipElems(index, CHUNK_SIZE-(lexiconMetadata->elemsFirstChunk));
+            skipElems(index, CHUNK_SIZE-(lexiconMetadata->elemsLastChunk));
 
         }
         index.read(reinterpret_cast<char*>(chunk->freq), static_cast<std::streamsize>(elemsInChunk(lexiconMetadata, i)));

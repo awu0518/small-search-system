@@ -78,9 +78,7 @@ int main() {
             lexicon[termid] = lexiconData{0, 0, 0, 0, 0, 0, nextSkip_lastDocID};
              // set up first entry into the lexicon
         }
-        
-
-        
+    
     
         if (prevTermID != termid){
             lexicon[prevTermID].elemsLastChunk = buffer.currListInd - buffer.flushedListInd;
