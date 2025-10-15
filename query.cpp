@@ -450,7 +450,7 @@ void conjunctiveDAAT(std::vector<std::pair<uint32_t, InvertedList*>>& lists,
         for (; index < lists.size(); index++) {
             // std::cout << "Attempting inner search on list: " << index << std::endl;
             res = findNextDocID(lists[index].second, currDocId);
-            if (res != currDocId && res == N ) { break; }
+            if (res != currDocId || res == N ) { break; }
         }
         if (res == N) break;
         
